@@ -36,15 +36,19 @@ jobs:
           - { os: ubuntu-24.04-arm, name: linux-arm64 }
           - { os: macos-15,         name: macos-arm64 }
           - { os: macos-15-intel,   name: macos-x64 }
-          - { os: windows-2022,     name: windows-x64 }
+          # Windows builds inside MSYS2 (MINGW64): OpenSSL's mingw64 target needs a unix-like perl and make.
+          - { os: windows-2022,     name: windows-x64, shell: 'C:\msys64\usr\bin\bash.exe -leo pipefail {0}' }
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.name }}
     # Job-level `if` is evaluated before matrix expansion, so the 'only' filter lives on the steps.
     env:
       ONLY_OK: ${{ github.event_name != 'workflow_dispatch' || inputs.only == 'all' || matrix.name == inputs.only }}
+      MSYSTEM: MINGW64
+      MSYS2_PATH_TYPE: inherit
+      CHERE_INVOKING: "1"
     defaults:
       run:
-        shell: bash
+        shell: ${{ matrix.shell || 'bash' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: env.ONLY_OK == 'true'
@@ -65,19 +69,10 @@ jobs:
         if: runner.os == 'macOS' && env.ONLY_OK == 'true'
         run: brew install ninja coreutils
 
-      - name: toolchain (windows)
+      - name: toolchain (windows, MSYS2 packages)
         if: runner.os == 'Windows' && env.ONLY_OK == 'true'
-        run: |
-          if ! command -v g++ >/dev/null 2>&1 || ! command -v ninja >/dev/null 2>&1; then
-            for i in 1 2 3; do
-              choco install -y mingw ninja && break
-              echo "choco attempt $i failed; retrying"; sleep 20
-            done
-          fi
-          # Git-for-Windows perl lacks modules OpenSSL's Configure needs; Strawberry Perl is preinstalled.
-          echo 'C:\Strawberry\perl\bin' >> "$GITHUB_PATH"
-          command -v g++ >/dev/null 2>&1 || { echo "no mingw g++ on PATH"; exit 1; }
-          g++ --version | head -1
+        shell: cmd
+        run: C:\msys64\usr\bin\pacman.exe -S --noconfirm --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-ninja mingw-w64-x86_64-python mingw-w64-x86_64-make make perl
 
       - name: lmscript compiler (npm @lmctl-ai/lmctl, DSL v5)
         if: env.ONLY_OK == 'true'
@@ -91,14 +86,6 @@ jobs:
           npm i -g @lmctl-ai/lmctl@0.2.347
           scripts/select-compiler.sh | tee compiler.txt
           grep -q lmscript compiler.txt || { echo "no v5 compiler available"; exit 1; }
-
-      - name: python3 shim (windows)
-        if: runner.os == 'Windows' && env.ONLY_OK == 'true'
-        run: |
-          mkdir -p .ci-bin
-          printf '#!/usr/bin/env bash\nexec python "$@"\n' > .ci-bin/python3
-          chmod +x .ci-bin/python3
-          echo "$PWD/.ci-bin" >> "$GITHUB_PATH"
 
       - name: build and test
         if: env.ONLY_OK == 'true'
