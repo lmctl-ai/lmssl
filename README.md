@@ -88,4 +88,4 @@ Design notes are in [`durable-memory/`](durable-memory/index.md).
 ## License
 
 Apache-2.0, the same license as OpenSSL 3 and later (see [`LICENSE`](LICENSE)); third-party notices are in
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). Copyright 2026 Lattice Systems LLC.
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
