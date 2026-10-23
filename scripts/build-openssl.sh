@@ -28,6 +28,7 @@ fi
 
 MAKE=make; command -v make >/dev/null 2>&1 || MAKE=mingw32-make
 $MAKE -j"$JOBS" build_libs
+rm -f apps/openssl-bin-openssl.o   # a previous run left the renamed-main object; rebuild the stock one
 $MAKE -j"$JOBS" "apps/openssl$EXE"
 
 # Recompile only apps/openssl.c with main renamed (a command-line CPPFLAGS applies to this one target).
