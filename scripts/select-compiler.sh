@@ -28,6 +28,13 @@ PY
 then
   printf '%s\n' "$candidate"
 else
+  if [ -n "${LMSSL_DEBUG:-}" ]; then
+    echo "--- compiler probe diagnostics (candidate=$candidate)" >&2
+    cat "$WORK/probe.lms" >&2 || true
+    [ -n "$candidate" ] && "$candidate" --dsl-signatures "$HERE/schema/lmssl.dsl.json" 2>&1 | head -3 >&2
+    [ -n "$candidate" ] && "$candidate" "$WORK/probe.lms" "$WORK/probe.dslb" 2>&1 | head -10 >&2
+    ls -la "$WORK" >&2
+  fi
   echo "error: no DSL v5 compiler found; install @lmctl-ai/lmctl so lmscript is on PATH, or set LMSCRIPT_BIN" >&2
   exit 2
 fi

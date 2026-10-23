@@ -84,7 +84,7 @@ jobs:
         if: env.ONLY_OK == 'true'
         run: |
           npm i -g @lmctl-ai/lmctl@0.2.347
-          scripts/select-compiler.sh | tee compiler.txt
+          LMSSL_DEBUG=1 scripts/select-compiler.sh | tee compiler.txt
           grep -q lmscript compiler.txt || { echo "no v5 compiler available"; exit 1; }
 
       - name: build and test
