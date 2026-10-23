@@ -12,6 +12,10 @@
 #include <fstream>
 #include <random>
 #include <iostream>
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
 #include <openssl/crypto.h>
 #include <openssl/x509.h>
 #include <string>
@@ -64,6 +68,11 @@ void ensure_config() {
 
 int main(int argc, char **argv) {
   const std::string first = argc > 1 ? argv[1] : "";
+#ifdef _WIN32
+  // Text mode would turn \n into \r\n: --dsl-schema --json must stay byte-identical and the result line one line.
+  _setmode(_fileno(stdout), _O_BINARY);
+  _setmode(_fileno(stderr), _O_BINARY);
+#endif
   const bool ours = first == "--version" || first == "--dsl-schema" || first == "--dsl-signatures" || first == "--dsl" || first == "--json";
   if (!ours) {
     ensure_config();
