@@ -104,7 +104,7 @@ SERVERS+=($!)
 for _ in $(seq 1 100); do [ -s "$WORK/server/port" ] && break; sleep 0.1; done
 PORT="$(cat "$WORK/server/port")"
 [ -n "$PORT" ] || fail "server did not start: $(cat "$WORK/serve.log")"
-$TIMEOUT_CMD 60 "$HOST" --dsl "$WORK/steps.dslb" localhost "$PORT" /old "$WORK/server/cert.pem" > "$WORK/steps.txt" || { cat "$WORK/steps.txt" "$WORK/serve.log"; fail "https-steps against the local server"; }
+MSYS2_ARG_CONV_EXCL="*" $TIMEOUT_CMD 60 "$HOST" --dsl "$WORK/steps.dslb" localhost "$PORT" /old "$WORK/server/cert.pem" > "$WORK/steps.txt" || { cat "$WORK/steps.txt" "$WORK/serve.log"; fail "https-steps against the local server"; }
 grep -q 'HTTP/1.1 302 Found' "$WORK/steps.txt" && grep -q 'request 2: https://localhost:'"$PORT"'/new' "$WORK/steps.txt" \
   && grep -q 'HTTP/1.1 200 OK' "$WORK/steps.txt" && grep -q 'verification: ok' "$WORK/steps.txt" \
   && grep -q 'ClientHello' "$WORK/steps.txt" && grep -q 'sni:      localhost' "$WORK/steps.txt" || { cat "$WORK/steps.txt"; fail "https-steps output"; }
