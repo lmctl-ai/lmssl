@@ -2,6 +2,7 @@
 # Build lmssl and run every check. Needs: cmake, a C/C++ toolchain, perl, make, and lmscript (@lmctl-ai/lmctl, DSL v5).
 # The network example (https-steps against a public site) is skipped unless LMSSL_NETWORK=1.
 set -euo pipefail
+export MSYS2_ARG_CONV_EXCL="*"   # MSYS bash must not rewrite "/CN=x" style arguments into Windows paths
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$HERE"
 BUILD_DIR="${BUILD_DIR:-build}"
@@ -57,7 +58,7 @@ ok "host registry signatures equal the compiler's view of the schema ($(wc -l < 
 "$HOST" version | grep -q '^OpenSSL 4' || fail "openssl version"
 [ "$(printf abc | "$HOST" dgst -sha256 -r | cut -d' ' -f1)" = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad ] || fail "openssl dgst"
 "$HOST" req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout "$WORK/k.pem" -out "$WORK/c.pem" \
-  -subj "/CN=cli.test" -days 2 > /dev/null 2>&1 || fail "openssl req -x509 (embedded default openssl.cnf)"
+  -subj "/CN=cli.test" -days 2 > "$WORK/req.log" 2>&1 || { cat "$WORK/req.log"; fail "openssl req -x509 (embedded default openssl.cnf)"; }
 "$HOST" x509 -in "$WORK/c.pem" -noout -subject | grep -q 'cli.test' || fail "openssl x509"
 ok "OpenSSL commands work (version, dgst, req -x509, x509)"
 
