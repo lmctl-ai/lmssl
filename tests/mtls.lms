@@ -1,0 +1,15 @@
+# Mutual TLS in one process family: this script is the CLIENT. The server is serve-mtls.lms.
+# Run: lmssl --dsl mtls.dslb PORT DIR       (DIR holds ca.pem, client.pem, client.key written by serve-mtls)
+p = _dsl_ schema="../schema/lmssl.dsl.json";
+let args = ssl.args();
+let dir = args.at(1);
+let conn = net.connect("localhost", str_to_int(args.at(0)));
+let ctx = ssl.client_ctx();
+ctx.ca_file(dir + "/ca.pem");
+ctx.client_cert(ssl.load_cert(dir + "/client.pem"), ssl.load_key(dir + "/client.key"));
+let tls = ctx.connect(conn, "localhost");
+tls.write("who am i\n");
+out.line("server says: " + str_trim(tls.read_until("\n", 1000)));
+tls.shutdown();
+end _dsl_
+savedsl(p, ARGV[0]);

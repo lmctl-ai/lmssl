@@ -1,0 +1,123 @@
+# One HTTPS request, taken apart into the steps a browser or curl does silently:
+#   1 DNS      name -> addresses
+#   2 TCP      connect, no crypto yet
+#   3 TLS      handshake: protocol, key exchange group, cipher, ALPN; the handshake messages themselves
+#   4 PKI      the certificate chain the server sent and whether it verified against a trust store
+#   5 HTTP     write a request, read the status line and headers, follow redirects (up to 4 hops)
+# It is meant for understanding what happens, not for replacing curl: no cookies, no chunked decoding, no retries.
+#
+# Compile: lmscript examples/https-steps.lms build/https-steps.dslb
+# Run:     lmssl --dsl build/https-steps.dslb [HOST=www.google.com] [PORT=443] [PATH=/] [CAFILE]
+#   Without CAFILE the operating system's trust store is used (system_roots).
+#   Try:  HOST=google.com    -> a redirect to www.google.com to follow
+#         HOST=expired.badssl.com or self-signed.badssl.com  -> see the verification failure explained
+out_path = ARGV.len() > 0 ? ARGV[0] : "build/https-steps.dslb";
+p = _dsl_ schema="../schema/lmssl.dsl.json";
+
+fn header_value(head: string, name: string) -> string {
+  let low = str_lower(head);
+  let at = str_find(low, "\r\n" + str_lower(name) + ":");
+  let value = "";
+  if (at >= 0) {
+    let rest = str_substr(head, at + 2 + str_len(name) + 1, 4096);
+    value = str_trim(str_split(rest, "\r\n").at(0));
+  }
+  return value;
+}
+
+let args = ssl.args();
+let host = "www.google.com";
+let port = 443;
+let path = "/";
+let cafile = "";
+if (args.len() > 0) { host = args.at(0); }
+if (args.len() > 1) { port = str_to_int(args.at(1)); }
+if (args.len() > 2) { path = args.at(2); }
+if (args.len() > 3) { cafile = args.at(3); }
+
+let hop = 0;
+let more = true;
+while (more && hop < 5) {
+  hop = hop + 1;
+  out.line("");
+  out.line("=== request " + str(hop) + ": https://" + host + ":" + str(port) + path + " ===");
+
+  # 1. DNS
+  let addrs = net.resolve(host);
+  out.line("[1 dns]  " + host + " -> " + addrs.join(", "));
+
+  # 2. TCP
+  let conn = net.connect(host, port);
+  out.line("[2 tcp]  connected " + conn.local() + " -> " + conn.peer());
+
+  # 3. TLS. A context is the client's policy: versions, ALPN, trust. trace(true) records every handshake message.
+  let ctx = ssl.client_ctx();
+  ctx.min_version("TLSv1.2");
+  ctx.alpn("http/1.1");
+  ctx.trace(true);
+  if (cafile == "") { ctx.system_roots(); } else { ctx.ca_file(cafile); }
+  let tls = ctx.connect(conn, host);
+  out.line("[3 tls]  " + tls.version() + ", cipher " + tls.cipher() + ", key exchange group " + tls.group());
+  out.line("         server signature algorithm " + tls.peer_sigalg() + ", ALPN '" + tls.alpn() + "'");
+  out.line("         handshake messages:");
+  let lines = str_split(tls.trace(), "\n");
+  for (l in lines) {
+    if (str_contains(l, ", Length=") && !str_contains(l, "Length=0")) {
+      out.line("           " + str_trim(l));
+    }
+  }
+
+  # 4. PKI. The chain is what the server sent; verified() is the result of validating it against the trust store.
+  out.line("[4 pki]  verification: " + tls.verify_result());
+  for (i in range(0, tls.chain_len())) {
+    let c = tls.chain_at(i);
+    out.line("         #" + str(i) + " " + c.subject() + "   <- " + c.issuer());
+    out.line("            " + c.key_type() + ", " + c.sig_alg() + ", valid until " + c.not_after());
+  }
+  let leaf = tls.peer();
+  out.line("         leaf names: " + str_substr(leaf.san_text(), 0, 100));
+  out.line("         leaf covers " + host + ": " + str(leaf.matches_host(host)));
+
+  # 5. HTTP/1.1 over the TLS stream
+  let hostline = host;
+  if (port != 443) { hostline = host + ":" + str(port); }
+  tls.write("GET " + path + " HTTP/1.1\r\nHost: " + hostline + "\r\nUser-Agent: lmssl-example\r\nAccept: */*\r\nConnection: close\r\n\r\n");
+  let head = tls.read_until("\r\n\r\n", 65536);
+  let heads = str_split(head, "\r\n");
+  out.line("[5 http] " + heads.at(0));
+  for (i in range(1, heads.len())) {
+    let name = str_lower(str_split(heads.at(i), ":").at(0));
+    if (name == "content-type" || name == "server" || name == "location" || name == "content-length" || name == "alt-svc") {
+      out.line("         " + heads.at(i));
+    }
+  }
+  let status = str_to_int(str_substr(heads.at(0), 9, 3));
+  let location = header_value(head, "location");
+  more = false;
+  if (status >= 300 && status < 400 && location != "") {
+    if (str_starts_with(location, "https://")) {
+      let rest = str_substr(location, 8, 2048);
+      let slash = str_find(rest, "/");
+      let authority = rest;
+      path = "/";
+      if (slash >= 0) { authority = str_substr(rest, 0, slash); path = str_substr(rest, slash, 2048); }
+      let colon = str_find(authority, ":");
+      port = 443;
+      if (colon >= 0) { port = str_to_int(str_substr(authority, colon + 1, 6)); authority = str_substr(authority, 0, colon); }
+      host = authority;
+      more = true;
+    } else if (str_starts_with(location, "/")) {
+      path = location;
+      more = true;
+    } else {
+      out.line("         (not following non-https redirect " + location + ")");
+    }
+  }
+  if (!more) {
+    let body = tls.read(300);
+    out.line("         body (first " + str(str_len(body)) + " bytes): " + str_replace(str_replace(body, "\r", ""), "\n", " | "));
+  }
+  tls.shutdown();
+}
+end _dsl_
+savedsl(p, out_path);

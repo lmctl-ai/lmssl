@@ -1,0 +1,57 @@
+# A throwaway HTTPS server for looking at the other side of a handshake (and for testing https-steps.lms offline).
+# It makes a self-signed certificate for localhost, listens, and answers N requests:
+#   /old      -> 302 to /new       (to watch a client follow a redirect)
+#   anything  -> 200 with a text/plain description of the TLS session it just negotiated
+#
+# Compile: lmscript examples/serve-https.lms build/serve-https.dslb
+# Run:     lmssl --dsl build/serve-https.dslb [PORT=0] [REQUESTS=1] [DIR=build/server]
+#   PORT 0 lets the OS choose; the chosen port is printed and written to DIR/port. The certificate is DIR/cert.pem:
+#   hand it to the client as its trust anchor (see https-steps.lms).
+out_path = ARGV.len() > 0 ? ARGV[0] : "build/serve-https.dslb";
+p = _dsl_ schema="../schema/lmssl.dsl.json";
+let args = ssl.args();
+let port = 0;
+let requests = 1;
+let dir = "build/server";
+if (args.len() > 0) { port = str_to_int(args.at(0)); }
+if (args.len() > 1) { requests = str_to_int(args.at(1)); }
+if (args.len() > 2) { dir = args.at(2); }
+fs.mkdir(dir);
+
+let key = ssl.gen_ec("P-256");
+let cert = ssl.new_cert(key, "O=lmssl demo,CN=localhost");
+cert.san("DNS:localhost,DNS:*.localhost,IP:127.0.0.1,IP:::1");
+cert.ext("extendedKeyUsage", "serverAuth");
+cert.valid_days(1);
+cert.sign_self(key, "SHA256");
+cert.save(dir + "/cert.pem");
+
+let ctx = ssl.server_ctx(cert, key);
+ctx.min_version("TLSv1.2");
+ctx.alpn("http/1.1");
+
+let listener = net.listen(port);
+fs.write(dir + "/port", str(listener.port()));
+out.line("listening on port " + str(listener.port()) + ", certificate " + dir + "/cert.pem");
+
+for (n in range(0, requests)) {
+  let conn = listener.accept();
+  let tls = ctx.accept(conn);
+  let head = tls.read_until("\r\n\r\n", 65536);
+  let request_line = str_split(head, "\r\n").at(0);
+  let parts = str_split(request_line, " ");
+  let path = "/";
+  if (parts.len() > 1) { path = parts.at(1); }
+  out.line("request " + str(n + 1) + " from " + conn.peer() + ": " + request_line);
+  if (path == "/old") {
+    let reply = "redirecting\n";
+    tls.write("HTTP/1.1 302 Found\r\nLocation: https://localhost:" + str(listener.port()) + "/new\r\nContent-Length: " + str(str_len(reply)) + "\r\nConnection: close\r\n\r\n" + reply);
+  } else {
+    let body = "hello from lmssl\nprotocol: " + tls.version() + "\ncipher:   " + tls.cipher() + "\nalpn:     " + tls.alpn() + "\nsni:      " + tls.server_name() + "\npath:     " + path + "\n";
+    tls.write("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " + str(str_len(body)) + "\r\nConnection: close\r\n\r\n" + body);
+  }
+  tls.shutdown();
+}
+listener.close();
+end _dsl_
+savedsl(p, out_path);

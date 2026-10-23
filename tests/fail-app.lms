@@ -1,0 +1,7 @@
+# out.fail ends the run with the application exit code (4).
+p = _dsl_ schema="../schema/lmssl.dsl.json";
+out.line("before");
+out.fail("deliberate application failure");
+out.line("never printed");
+end _dsl_
+savedsl(p, ARGV[0]);

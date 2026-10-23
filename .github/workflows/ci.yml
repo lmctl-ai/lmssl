@@ -1,0 +1,155 @@
+name: ci
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Run a single matrix job (or 'all')"
+        required: true
+        default: "all"
+        type: choice
+        options: [all, linux-x64, linux-arm64, macos-arm64, macos-x64, windows-x64]
+  push:
+    branches: [main]
+    tags: ["v*"]
+    # docs-only pushes do not need the 5-OS matrix; path filters are not evaluated for tag pushes,
+    # so releases always build
+    paths-ignore: ["durable-memory/**", "**.md"]
+  pull_request:
+    paths-ignore: ["durable-memory/**", "**.md"]
+
+# Least privilege: build jobs only read; the release job alone gets contents: write.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04,     name: linux-x64 }
+          - { os: ubuntu-24.04-arm, name: linux-arm64 }
+          - { os: macos-15,         name: macos-arm64 }
+          - { os: macos-15-intel,   name: macos-x64 }
+          - { os: windows-2022,     name: windows-x64 }
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.name }}
+    # Job-level `if` is evaluated before matrix expansion, so the 'only' filter lives on the steps.
+    env:
+      ONLY_OK: ${{ github.event_name != 'workflow_dispatch' || inputs.only == 'all' || matrix.name == inputs.only }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: env.ONLY_OK == 'true'
+        with:
+          persist-credentials: false
+
+      - name: fetch the pinned OpenSSL (openssl.lock) and verify the vendored sdk header
+        if: env.ONLY_OK == 'true'
+        run: |
+          scripts/sync-openssl.sh --verify
+          scripts/sync-sdk.sh --verify
+
+      - name: toolchain (linux)
+        if: runner.os == 'Linux' && env.ONLY_OK == 'true'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build
+
+      - name: toolchain (macos)
+        if: runner.os == 'macOS' && env.ONLY_OK == 'true'
+        run: brew install ninja coreutils
+
+      - name: toolchain (windows)
+        if: runner.os == 'Windows' && env.ONLY_OK == 'true'
+        run: |
+          if ! command -v g++ >/dev/null 2>&1 || ! command -v ninja >/dev/null 2>&1; then
+            for i in 1 2 3; do
+              choco install -y mingw ninja && break
+              echo "choco attempt $i failed; retrying"; sleep 20
+            done
+          fi
+          command -v g++ >/dev/null 2>&1 || { echo "no mingw g++ on PATH"; exit 1; }
+          g++ --version | head -1
+
+      - name: lmscript compiler (npm @lmctl-ai/lmctl, DSL v5)
+        if: env.ONLY_OK == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
+      - name: install and probe the compiler
+        if: env.ONLY_OK == 'true'
+        run: |
+          npm i -g @lmctl-ai/lmctl@0.2.347
+          scripts/select-compiler.sh | tee compiler.txt
+          grep -q lmscript compiler.txt || { echo "no v5 compiler available"; exit 1; }
+
+      - name: python3 shim (windows)
+        if: runner.os == 'Windows' && env.ONLY_OK == 'true'
+        run: |
+          mkdir -p .ci-bin
+          printf '#!/usr/bin/env bash\nexec python "$@"\n' > .ci-bin/python3
+          chmod +x .ci-bin/python3
+          echo "$PWD/.ci-bin" >> "$GITHUB_PATH"
+
+      - name: build and test
+        if: env.ONLY_OK == 'true'
+        run: ./test.sh
+
+      - name: package artifact
+        if: env.ONLY_OK == 'true'
+        run: |
+          mkdir -p dist
+          ext=""; [ "$RUNNER_OS" = "Windows" ] && ext=".exe"
+          cp "build/lmssl$ext" "dist/lmssl-${{ matrix.name }}$ext"
+          cp LICENSE THIRD_PARTY_NOTICES.md dist/
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: env.ONLY_OK == 'true'
+        with:
+          name: lmssl-${{ matrix.name }}
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # gh release create
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: lmssl-*
+          path: dist
+          merge-multiple: true
+
+      - name: tag matches lmssl --version (lmscript @latest compares them)
+        run: |
+          chmod +x dist/lmssl-linux-x64
+          got="$(dist/lmssl-linux-x64 --version | cut -d' ' -f1-2)"
+          test "$got" = "lmssl ${GITHUB_REF_NAME#v}" || { echo "::error::tag $GITHUB_REF_NAME but binary says '$got' (bump project VERSION in CMakeLists.txt)"; exit 1; }
+
+      - name: checksums
+        run: cd dist && sha256sum lmssl-* > SHA256SUMS && cat SHA256SUMS
+
+      - name: attach binaries to the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # idempotent: re-running a tag's workflow overwrites the assets
+          if gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --clobber dist/*
+          else
+            gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes dist/*
+          fi

@@ -1,0 +1,3 @@
+repo=https://github.com/openssl/openssl.git
+tag=openssl-4.0.3
+commit=af1775b60dfa141a4ad762585052cabeb9f37e9e

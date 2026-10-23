@@ -1,0 +1,7 @@
+build*/
+third_party/
+*.dslb
+build.log
+lmssl.lmctl
+p1.txt
+AGENTS.md

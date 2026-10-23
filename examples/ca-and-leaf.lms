@@ -1,0 +1,62 @@
+# A tiny certificate authority: root CA -> CSR -> leaf certificate, then check the chain.
+#
+# This is what `openssl genpkey`, `req -new`, `req -x509`, `x509 -req -CA` and `verify` do between them.
+# The script keeps the roles apart on purpose: the "server" only ever hands its CSR to the "CA".
+#
+# Compile: lmscript examples/ca-and-leaf.lms build/ca-and-leaf.dslb
+# Run:     lmssl --dsl build/ca-and-leaf.dslb [OUTDIR]        (default OUTDIR: build/pki)
+out_path = ARGV.len() > 0 ? ARGV[0] : "build/ca-and-leaf.dslb";
+p = _dsl_ schema="../schema/lmssl.dsl.json";
+let dir = "build/pki";
+if (ssl.args().len() > 0) { dir = ssl.args().at(0); }
+fs.mkdir(dir);
+
+# --- the CA: a key, and a certificate that signs itself and says CA:TRUE
+let ca_key = ssl.gen_ec("P-384");
+let ca = ssl.new_cert(ca_key, "O=lmssl demo,CN=lmssl demo root CA");
+ca.valid_days(3650);
+ca.ca(true);
+ca.sign_self(ca_key, "SHA384");
+ca_key.save(dir + "/ca.key");
+ca.save(dir + "/ca.pem");
+out.line("CA        " + ca.subject() + "  is_ca=" + str(ca.is_ca()) + "  self_signed=" + str(ca.self_signed()));
+
+# --- the server: its own key, and a CSR that proves it holds the key and names what it wants
+let srv_key = ssl.gen_ec("P-256");
+let csr = ssl.new_csr(srv_key, "O=lmssl demo,CN=app.example.test");
+csr.san("DNS:app.example.test,DNS:*.apps.example.test");
+csr.sign(srv_key, "SHA256");
+srv_key.save(dir + "/server.key");
+csr.save(dir + "/server.csr");
+out.line("CSR       " + csr.subject() + "  signature_ok=" + str(csr.verify()));
+
+# --- the CA checks the CSR, adds its own policy, and signs
+let leaf = ssl.cert_from_csr(csr);        # copies subject, public key and the requested SANs
+leaf.valid_days(30);
+leaf.ext("keyUsage", "critical,digitalSignature");
+leaf.ext("extendedKeyUsage", "serverAuth");
+leaf.sign_with(ca, ca_key, "SHA384");
+leaf.save(dir + "/server.pem");
+out.line("LEAF      " + leaf.subject());
+out.line("  issuer  " + leaf.issuer());
+out.line("  SANs    " + leaf.san_text());
+out.line("  sigalg  " + leaf.sig_alg());
+
+# --- what a verifier concludes
+out.line("signed by the CA:                " + str(leaf.verify_with(ca)));
+out.line("self-signed:                     " + str(leaf.self_signed()));
+out.line("covers app.example.test:         " + str(leaf.matches_host("app.example.test")));
+out.line("covers x.apps.example.test:      " + str(leaf.matches_host("x.apps.example.test")));
+out.line("covers example.test:             " + str(leaf.matches_host("example.test")));
+
+# A different CA must not validate the leaf: same subject name, different key.
+let other_key = ssl.gen_ec("P-384");
+let other = ssl.new_cert(other_key, "O=lmssl demo,CN=lmssl demo root CA");
+other.ca(true);
+other.sign_self(other_key, "SHA384");
+out.line("signed by an impostor CA:        " + str(leaf.verify_with(other)));
+if (!leaf.verify_with(ca) || leaf.verify_with(other)) { out.fail("chain check is wrong"); }
+out.line("check it with the OpenSSL command line:");
+out.line("  lmssl verify -CAfile " + dir + "/ca.pem " + dir + "/server.pem");
+end _dsl_
+savedsl(p, out_path);

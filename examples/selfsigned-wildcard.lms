@@ -1,0 +1,53 @@
+# Generate a self-signed wildcard certificate, one OpenSSL step at a time.
+#
+# Same job as:
+#   openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 90 \
+#     -subj "/O=lmssl demo/CN=*.example.test" -addext "subjectAltName=DNS:*.example.test,DNS:example.test"
+# but every call below is one libcrypto concept: key -> certificate template -> extensions -> signature.
+#
+# Compile: lmscript examples/selfsigned-wildcard.lms build/selfsigned-wildcard.dslb
+# Run:     lmssl --dsl build/selfsigned-wildcard.dslb [OUTDIR]     (default OUTDIR: build/wildcard)
+out_path = ARGV.len() > 0 ? ARGV[0] : "build/selfsigned-wildcard.dslb";
+p = _dsl_ schema="../schema/lmssl.dsl.json";
+let dir = "build/wildcard";
+if (ssl.args().len() > 0) { dir = ssl.args().at(0); }
+fs.mkdir(dir);
+
+# 1. The key pair. P-256 keeps the demo instant; ssl.gen_rsa(2048) works the same way.
+let key = ssl.gen_ec("P-256");
+out.line("1. key:         " + key.type() + " on curve " + key.curve() + ", " + str(key.bits()) + " bits");
+key.save(dir + "/key.pem");                       # written with mode 0600
+out.line("   fingerprint: " + key.fingerprint() + "   (sha256 of the public key)");
+
+# 2. An unsigned certificate holding the subject and the PUBLIC half of the key.
+let cert = ssl.new_cert(key, "O=lmssl demo,CN=*.example.test");
+
+# 3. Policy lives in extensions. A wildcard matches exactly one label: foo.example.test, not a.b.example.test.
+cert.san("DNS:*.example.test,DNS:example.test");
+cert.ext("extendedKeyUsage", "serverAuth,clientAuth");
+cert.ext("keyUsage", "critical,digitalSignature,keyEncipherment");
+cert.valid_days(90);
+
+# 4. Signing fixes every byte: the issuer name is set to the subject and the TBS part is signed by `key`.
+cert.sign_self(key, "SHA256");
+cert.save(dir + "/cert.pem");
+
+out.line("2. subject:     " + cert.subject());
+out.line("   issuer:      " + cert.issuer());
+out.line("   serial:      " + cert.serial_hex());
+out.line("   valid:       " + cert.not_before() + " .. " + cert.not_after());
+out.line("   SANs:        " + cert.san_text());
+out.line("   signature:   " + cert.sig_alg() + " over a " + cert.key_type() + " key");
+out.line("   fingerprint: " + cert.fingerprint("SHA256"));
+
+# 5. What a TLS client asks: does this certificate cover the host name it dialled?
+let hosts = str_split("www.example.test,example.test,a.b.example.test,example.org", ",");
+for (h in hosts) {
+  let verdict = "no";
+  if (cert.matches_host(h)) { verdict = "yes"; }
+  out.line("3. matches " + h + ": " + verdict);
+}
+if (!cert.self_signed()) { out.fail("certificate should verify against its own key"); }
+out.line("4. self-signed: signature verifies with the certificate's own public key");
+end _dsl_
+savedsl(p, out_path);

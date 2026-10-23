@@ -1,0 +1,49 @@
+# The building blocks under TLS, with published test vectors you can check by eye:
+# digest, HMAC, PBKDF2, an AEAD (AES-256-GCM), and a signature.
+#
+# Compile: lmscript examples/crypto-basics.lms build/crypto-basics.dslb
+# Run:     lmssl --dsl build/crypto-basics.dslb
+out_path = ARGV.len() > 0 ? ARGV[0] : "build/crypto-basics.dslb";
+p = _dsl_ schema="../schema/lmssl.dsl.json";
+
+fn check(name: string, got: string, want: string) -> void {
+  if (got != want) { out.fail(name + " mismatch: got " + got + ", want " + want); }
+  out.line("ok  " + name + " = " + got);
+}
+
+# 1. Digests (FIPS 180 / RFC 1321 vectors for "abc").
+check("sha256(abc)", ssl.digest("SHA256", "abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+check("sha1(abc)", ssl.digest("SHA1", "abc"), "a9993e364706816aba3e25717850c26c9cd0d89d");
+check("md5(abc)", ssl.digest("MD5", "abc"), "900150983cd24fb0d6963f7d28e17f72");
+
+# 2. HMAC (RFC 4231 test case 2).
+check("hmac-sha256", ssl.hmac("SHA256", "Jefe", "what do ya want for nothing?"), "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843");
+
+# 3. PBKDF2-HMAC-SHA1 (RFC 6070): 2 iterations, 20 byte output.
+check("pbkdf2", ssl.pbkdf2("password", "salt", 2, "SHA1", 20), "ea6c014dc72d6f8ccd1ed92ace1d41f0d8de8957");
+
+# 4. Encoding helpers.
+check("hex", ssl.hex("lmssl"), "6c6d73736c");
+check("base64", ssl.b64("lmssl"), "bG1zc2w=");
+check("unb64", ssl.unb64("bG1zc2w="), "lmssl");
+
+# 5. AES-256-GCM: seal returns ciphertext || 16-byte tag; open authenticates before returning plaintext.
+let key = ssl.rand_hex(32);
+let iv = ssl.rand_hex(12);
+let sealed = ssl.seal("aes-256-gcm", key, iv, "header", "attack at dawn");
+out.line("sealed      " + sealed + "   (" + str(str_len(sealed) / 2) + " bytes = 14 + 16 tag)");
+check("open", ssl.open("aes-256-gcm", key, iv, "header", sealed), "attack at dawn");
+check("chacha20-poly1305", ssl.open("chacha20-poly1305", key, iv, "", ssl.seal("chacha20-poly1305", key, iv, "", "same API")), "same API");
+
+# 6. A signature: Ed25519 signs the message itself; ECDSA signs its SHA-256 digest.
+let ed = ssl.gen_ed25519();
+let sig = ed.sign("", "release v1.0");
+out.line("ed25519 sig " + sig);
+out.line("verifies   " + str(ed.verify("", "release v1.0", sig)));
+out.line("tampered   " + str(ed.verify("", "release v1.1", sig)));
+let ec = ssl.gen_ec("P-256");
+let esig = ec.sign("SHA256", "release v1.0");
+out.line("ecdsa      verifies=" + str(ec.verify("SHA256", "release v1.0", esig)) + " tampered=" + str(ec.verify("SHA256", "release v9", esig)));
+if (!ed.verify("", "release v1.0", sig) || ed.verify("", "release v1.1", sig)) { out.fail("signature check is wrong"); }
+end _dsl_
+savedsl(p, out_path);

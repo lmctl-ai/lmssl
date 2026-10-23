@@ -1,0 +1,33 @@
+# Server side of mutual TLS: builds a CA, a server cert and a client cert, then requires the client certificate.
+# Run: lmssl --dsl serve-mtls.dslb PORT DIR      (PORT 0 = any free port; the chosen port is written to DIR/port)
+p = _dsl_ schema="../schema/lmssl.dsl.json";
+let args = ssl.args();
+let dir = args.at(1);
+fs.mkdir(dir);
+let ca_key = ssl.gen_ec("P-256");
+let ca = ssl.new_cert(ca_key, "CN=mtls test CA");
+ca.ca(true);
+ca.sign_self(ca_key, "SHA256");
+ca.save(dir + "/ca.pem");
+let skey = ssl.gen_ec("P-256");
+let scert = ssl.new_cert(skey, "CN=localhost");
+scert.san("DNS:localhost");
+scert.sign_with(ca, ca_key, "SHA256");
+let ckey = ssl.gen_ec("P-256");
+let ccert = ssl.new_cert(ckey, "CN=alice,O=clients");
+ccert.ext("extendedKeyUsage", "clientAuth");
+ccert.sign_with(ca, ca_key, "SHA256");
+ckey.save(dir + "/client.key");
+ccert.save(dir + "/client.pem");
+let ctx = ssl.server_ctx(scert, skey);
+ctx.add_ca(ca);
+ctx.require_client(true);
+let l = net.listen(str_to_int(args.at(0)));
+fs.write(dir + "/port", str(l.port()));
+let tls = ctx.accept(l.accept());
+let who = tls.peer().subject();
+tls.read_until("\n", 1000);
+tls.write("hello " + who + "\n");
+tls.shutdown();
+end _dsl_
+savedsl(p, ARGV[0]);
