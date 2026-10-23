@@ -20,9 +20,17 @@ case "$(uname -s)" in
   Linux) EXTRA=(-static) ;;
 esac
 
+PERL=perl
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    # Git-for-Windows perl lacks modules Configure needs; use Strawberry Perl with native (drive-letter) paths.
+    [ -x /c/Strawberry/perl/bin/perl.exe ] && PERL=/c/Strawberry/perl/bin/perl.exe
+    SRC="$(cygpath -m "$SRC")" ;;
+esac
+
 if [ ! -f Makefile ]; then
   # no-dso/no-shared: one static link; no-module: providers are built in; no-tests/no-docs: smaller, faster.
-  perl "$SRC/Configure" ${TARGET[@]+"${TARGET[@]}"} no-shared no-dso no-tests no-docs no-module no-afalgeng \
+  "$PERL" "$SRC/Configure" ${TARGET[@]+"${TARGET[@]}"} no-shared no-dso no-tests no-docs no-module no-afalgeng \
     enable-ssl-trace --libdir=lib ${EXTRA[@]+"${EXTRA[@]}"}
 fi
 
