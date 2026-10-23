@@ -29,7 +29,9 @@ ok "SDK header matches sdk.lock"
 scripts/sync-openssl.sh --verify >/dev/null || fail "OpenSSL pin mismatch"
 ok "third_party/openssl matches openssl.lock"
 
-cmake -S . -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release > "$WORK/cmake.log" 2>&1 || { cat "$WORK/cmake.log"; fail "cmake configure"; }
+CMAKE_GEN=()
+case "$UNAME_S" in MINGW*|MSYS*|CYGWIN*) CMAKE_GEN=(-G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++);; esac
+cmake -S . -B "$BUILD_DIR" ${CMAKE_GEN[@]+"${CMAKE_GEN[@]}"} -DCMAKE_BUILD_TYPE=Release > "$WORK/cmake.log" 2>&1 || { cat "$WORK/cmake.log"; fail "cmake configure"; }
 cmake --build "$BUILD_DIR" -j 4 > "$WORK/build.log" 2>&1 || { tail -50 "$WORK/build.log"; fail "build"; }
 [ -x "$HOST" ] || fail "no $HOST"
 ok "lmssl built ($(wc -c < "$HOST" | tr -d ' ') bytes)"

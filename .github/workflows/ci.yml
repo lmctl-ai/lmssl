@@ -74,6 +74,8 @@ jobs:
               echo "choco attempt $i failed; retrying"; sleep 20
             done
           fi
+          # Git-for-Windows perl lacks modules OpenSSL's Configure needs; Strawberry Perl is preinstalled.
+          echo 'C:\Strawberry\perl\bin' >> "$GITHUB_PATH"
           command -v g++ >/dev/null 2>&1 || { echo "no mingw g++ on PATH"; exit 1; }
           g++ --version | head -1
 

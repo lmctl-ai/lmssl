@@ -22,16 +22,17 @@ esac
 
 if [ ! -f Makefile ]; then
   # no-dso/no-shared: one static link; no-module: providers are built in; no-tests/no-docs: smaller, faster.
-  perl "$SRC/Configure" "${TARGET[@]}" no-shared no-dso no-tests no-docs no-module no-afalgeng \
-    enable-ssl-trace --libdir=lib "${EXTRA[@]}"
+  perl "$SRC/Configure" ${TARGET[@]+"${TARGET[@]}"} no-shared no-dso no-tests no-docs no-module no-afalgeng \
+    enable-ssl-trace --libdir=lib ${EXTRA[@]+"${EXTRA[@]}"}
 fi
 
-make -j"$JOBS" build_libs
-make -j"$JOBS" "apps/openssl$EXE"
+MAKE=make; command -v make >/dev/null 2>&1 || MAKE=mingw32-make
+$MAKE -j"$JOBS" build_libs
+$MAKE -j"$JOBS" "apps/openssl$EXE"
 
 # Recompile only apps/openssl.c with main renamed (a command-line CPPFLAGS applies to this one target).
 rm -f apps/openssl-bin-openssl.o
-make "apps/openssl-bin-openssl.o" "CPPFLAGS=-Dmain=lmssl_openssl_main"
+$MAKE "apps/openssl-bin-openssl.o" "CPPFLAGS=-Dmain=lmssl_openssl_main"
 
 rm -f liblmssl_cli.a
 objs=(apps/openssl-bin-*.o apps/lib/openssl-bin-*.o)
