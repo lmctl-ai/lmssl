@@ -14,9 +14,9 @@ mkdir -p "$BUILD"
 BUILD="$(cd "$BUILD" && pwd)"
 cd "$BUILD"
 
-EXE=""; TARGET=(); EXTRA=()
+EXE=""; O=".o"; TARGET=(); EXTRA=()
 case "$(uname -s)" in
-  MINGW*|MSYS*|CYGWIN*) EXE=".exe"; TARGET=(mingw64) ;;
+  MINGW*|MSYS*|CYGWIN*) EXE=".exe"; O=".obj"; TARGET=(mingw64) ;;
   Linux) EXTRA=(-static) ;;
 esac
 
@@ -30,15 +30,15 @@ fi
 
 MAKE=make; command -v make >/dev/null 2>&1 || MAKE=mingw32-make
 $MAKE -j"$JOBS" build_libs
-rm -f apps/openssl-bin-openssl.o   # a previous run left the renamed-main object; rebuild the stock one
+rm -f apps/openssl-bin-openssl$O   # a previous run left the renamed-main object; rebuild the stock one
 $MAKE -j"$JOBS" "apps/openssl$EXE"
 
 # Recompile only apps/openssl.c with main renamed (a command-line CPPFLAGS applies to this one target).
-rm -f apps/openssl-bin-openssl.o
-$MAKE "apps/openssl-bin-openssl.o" "CPPFLAGS=-Dmain=lmssl_openssl_main"
+rm -f apps/openssl-bin-openssl$O
+$MAKE "apps/openssl-bin-openssl$O" "CPPFLAGS=-Dmain=lmssl_openssl_main"
 
 rm -f liblmssl_cli.a
-objs=(apps/openssl-bin-*.o apps/lib/openssl-bin-*.o)
+objs=(apps/openssl-bin-*$O apps/lib/openssl-bin-*$O)
 ar rcs liblmssl_cli.a "${objs[@]}"
 ranlib liblmssl_cli.a 2>/dev/null || true
 ls -l libcrypto.a libssl.a apps/libapps.a liblmssl_cli.a
