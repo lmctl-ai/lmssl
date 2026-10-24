@@ -6,6 +6,7 @@
 #include "string.hpp"
 #include "math.hpp"
 #include "collections.hpp"
+#include "file.hpp"
 #undef DSLVM_STD_BUILDING
 
 namespace dslvm {
@@ -30,6 +31,7 @@ inline Registry& register_std(Registry& registry) {
   stdlib::register_string(candidate);
   stdlib::register_math(candidate);
   stdlib::register_collections(candidate, candidate.std_runtime_->collections);
+  stdlib::register_file(candidate, candidate.std_runtime_->collections);
   const auto after = candidate.signatures();
   std::set_difference(after.begin(), after.end(), before.begin(), before.end(), std::back_inserter(candidate.std_signatures_));
   candidate.std_initialized_ = true;

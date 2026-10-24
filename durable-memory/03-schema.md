@@ -70,3 +70,5 @@ Registry construction now installs std, so the host no longer registers catalogs
 schema/lmssl.host.json is the checked-in host declaration source. CMake merges it with the pinned canonical cpp/std/lmcode-std.schema.json using scripts/merge-std.py and generates ignored schema/lmssl.dsl.json for existing examples and embedding. Exact effective bytes still bind current compiler/load operations. Signature checks cover both merged and normalized host-only schemas. Canonical JSON and the merge helper are pinned alongside the complete header bundle in sdk.lock.
 
 The built-in standard excludes testing helpers. The host schema explicitly declares `print` and `assert_close`, and host registration explicitly binds the optional SDK testing catalog, preserving the previous public signatures.
+
+The pinned standard also supplies `file_read`, `file_write`, `file_append`, `file_exists`, and `file_lines` on raw bytes and native process-cwd paths. `file_lines` splits LF while retaining CR and trailing empty fields. SDK synchronization now pins nine artifacts, including `stdlib/file.hpp`.
