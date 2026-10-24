@@ -324,6 +324,7 @@ class Program {
   // Parses, binds and verifies. Nothing executes here. Throws dslvm::Error with a message naming the problem.
   static Program load(const std::string& bytecode, const std::string& schemaBytes, const Registry& reg) {
     Program p;
+    p.bound_registry_ = &reg;
     Reader r(bytecode);
     if (bytecode.size() < 4 || std::memcmp(bytecode.data(), MAGIC, 4) != 0) throw Error("LOAD_BAD_BYTECODE", "not a DSL bytecode file: bad magic (expected 'DSLB')");
     r.bytes(4);
@@ -376,7 +377,7 @@ class Program {
 
   // Executes the chunk once. The host's objects come from ctx (declared names only).
   void run(const Context& ctx, const Registry& reg, RunStats* stats = nullptr) const {
-    auto std_scope = reg.std_run_scope();
+    auto std_scope = (bound_registry_ ? *bound_registry_ : reg).std_run_scope();
     std::vector<Value> stack, locals(locals_.size());
     stack.reserve(max_stack_);
     Reader r(code_);
@@ -802,6 +803,7 @@ class Program {
         throw Error("LOAD_BAD_BYTECODE", "WHILE_TEST must leave the loop-head stack depth at offset " + std::to_string(in.pc));
     }
   }
+  const Registry* bound_registry_ = nullptr; // Same lifetime as the bound import entries.
   std::vector<std::string> consts_; std::vector<Import> imports_; std::vector<std::string> context_; std::vector<Local> locals_; uint16_t max_stack_ = 0; std::string code_; std::vector<Line> lines_; std::map<size_t, Loop> loops_;
 };
 

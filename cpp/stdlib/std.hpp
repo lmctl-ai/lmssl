@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 // The complete built-in standard. Include dslvm.hpp normally; individual catalog
 // headers also finish this aggregator after their own declarations are complete.
 #define DSLVM_STD_BUILDING
@@ -12,7 +13,7 @@ namespace dslvm {
 namespace stdlib {
 struct StdRuntime {
   Collections collections;
-  bool running = false;
+  std::atomic<bool> running{false};
 };
 } // namespace stdlib
 
@@ -50,12 +51,13 @@ inline void Registry::set_std_output(std::ostream* sink) {
   };
 }
 inline void Registry::begin_std_run() const {
-  if (std_runtime_->running) throw Error("std: registry already has an active run");
+  bool idle = false;
+  if (!std_runtime_->running.compare_exchange_strong(idle, true, std::memory_order_acquire))
+    throw Error("std: registry already has an active run");
   std_runtime_->collections.reset();
-  std_runtime_->running = true;
 }
 inline void Registry::end_std_run() const noexcept {
   std_runtime_->collections.reset();
-  std_runtime_->running = false;
+  std_runtime_->running.store(false, std::memory_order_release);
 }
 } // namespace dslvm
