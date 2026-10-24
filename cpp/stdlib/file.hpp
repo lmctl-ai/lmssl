@@ -87,6 +87,10 @@ template<class Path> inline std::string read_path(const Path& native, const std:
   char buffer[64 * 1024];
   while (input.read(buffer, sizeof buffer) || input.gcount()) data.append(buffer, static_cast<size_t>(input.gcount()));
   if (input.bad() || !input.eof()) throw failure(function, original, os_reason());
+  // EOF leaves failbit set after the final read; clear it before checking close.
+  input.clear();
+  input.close();
+  if (input.fail()) throw failure(function, original, os_reason());
   return data;
 }
 
@@ -134,6 +138,7 @@ inline Registry& register_file(Registry& r, Collections& arena) {
   });
   r.function("file_exists", {"string"}, "bool", [](Args& a) {
     const auto& path = a[0].s;
+    if (path.empty()) return Value::boolean(false);
     auto native = file_detail::native_path("file_exists", path);
     std::error_code ec;
     auto result = std::filesystem::status(native, ec);
