@@ -10,13 +10,14 @@
 #include <deque>
 #include <utility>
 #include <vector>
+#include <unordered_map>
 
 namespace dslvm::stdlib {
 template<class T> struct CollectionList { std::vector<T> items; };
 using StrList = CollectionList<std::string>;
 using IntList = CollectionList<int64_t>;
 using FloatList = CollectionList<double>;
-struct StrMap { std::vector<std::pair<std::string, std::string>> items; };
+struct StrMap { std::vector<std::pair<std::string, std::string>> items; std::unordered_map<std::string, size_t> index; void rebuild_index() { index.clear(); for (size_t i = 0; i < items.size(); ++i) index.emplace(items[i].first, i); } };
 
 // Stable addresses for the whole run. Keep this arena and its registry alive
 // while any handle is in use. Reset only between runs, after all handles expire.
@@ -104,30 +105,32 @@ inline Registry& register_collections(Registry& r, Collections& arena) {
   r.method("StrMap", "len", {}, "int", [](void* p, Args&) { return Value::integer(int64_t(static_cast<StrMap*>(p)->items.size())); });
   r.method("StrMap", "has", {"string"}, "bool", [](void* p, Args& a) {
     const auto& items = static_cast<StrMap*>(p)->items;
-    return Value::boolean(std::any_of(items.begin(), items.end(), [&](const auto& item) { return item.first == a[0].s; }));
+    const auto& map = *static_cast<StrMap*>(p);
+    return Value::boolean(map.index.find(a[0].s) != map.index.end());
   });
   r.method("StrMap", "get", {"string"}, "string", [](void* p, Args& a) {
-    for (const auto& item : static_cast<StrMap*>(p)->items) if (item.first == a[0].s) return Value::string(item.second);
+    const auto& map = *static_cast<StrMap*>(p); auto found = map.index.find(a[0].s);
+    if (found != map.index.end()) return Value::string(map.items[found->second].second);
     throw Error("StrMap.get: missing key"); return Value::none();
   });
   r.method("StrMap", "get_or", {"string", "string"}, "string", [](void* p, Args& a) {
-    for (const auto& item : static_cast<StrMap*>(p)->items) if (item.first == a[0].s) return Value::string(item.second);
+    const auto& map = *static_cast<StrMap*>(p); auto found = map.index.find(a[0].s);
+    if (found != map.index.end()) return Value::string(map.items[found->second].second);
     return Value::string(a[1].s);
   });
   r.method("StrMap", "set", {"string", "string"}, "StrMap", [](void* p, Args& a) {
-    auto& items = static_cast<StrMap*>(p)->items;
-    for (auto& item : items) if (item.first == a[0].s) { item.second = a[1].s; return Value::object("StrMap", p); }
-    items.emplace_back(a[0].s, a[1].s); return Value::object("StrMap", p);
+    auto& map = *static_cast<StrMap*>(p); auto found = map.index.find(a[0].s);
+    if (found != map.index.end()) { map.items[found->second].second = a[1].s; return Value::object("StrMap", p); }
+    map.index.emplace(a[0].s, map.items.size()); map.items.emplace_back(a[0].s, a[1].s); return Value::object("StrMap", p);
   });
   r.method("StrMap", "key_at", {"int"}, "string", [](void* p, Args& a) {
     const auto& items = static_cast<StrMap*>(p)->items;
     return Value::string(items[detail::collection_index(a[0].i, items.size(), "StrMap.key_at")].first);
   });
   r.method("StrMap", "remove", {"string"}, "bool", [](void* p, Args& a) {
-    auto& items = static_cast<StrMap*>(p)->items;
-    auto found = std::find_if(items.begin(), items.end(), [&](const auto& item) { return item.first == a[0].s; });
-    if (found == items.end()) return Value::boolean(false);
-    items.erase(found); return Value::boolean(true);
+    auto& map = *static_cast<StrMap*>(p); auto found = map.index.find(a[0].s);
+    if (found == map.index.end()) return Value::boolean(false);
+    map.items.erase(map.items.begin() + static_cast<std::ptrdiff_t>(found->second)); map.rebuild_index(); return Value::boolean(true);
   });
   r.method("StrMap", "clear", {}, "StrMap", [](void* p, Args&) { static_cast<StrMap*>(p)->items.clear(); return Value::object("StrMap", p); });
   return r;
