@@ -24,12 +24,12 @@ lmssl --dsl build/https-steps.dslb google.com   # run compiled DSL bytecode agai
 
 | **Self-signed wildcard** | **CA & leaf certificate** | **Crypto basics** |
 | --- | --- | --- |
-| <img src="docs/images/selfsigned-wildcard.png" width="290"> | <img src="docs/images/ca-and-leaf.png" width="290"> | <img src="docs/images/crypto-basics.png" width="290"> |
+| <img src="docs/images/selfsigned-wildcard.png" width="290" alt="selfsigned-wildcard"> | <img src="docs/images/ca-and-leaf.png" width="290" alt="ca-and-leaf"> | <img src="docs/images/crypto-basics.png" width="290" alt="crypto-basics"> |
 | EC key and self-signed wildcard certificate with SAN validation.<br>`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmssl/main/examples/selfsigned-wildcard.lms` | Root CA, server CSR, signed leaf certificate, and chain verification.<br>`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmssl/main/examples/ca-and-leaf.lms` | Digests, HMAC, PBKDF2, AES-256-GCM, ChaCha20-Poly1305, and Ed25519.<br>`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmssl/main/examples/crypto-basics.lms` |
 
 | **HTTPS handshake steps** | **Local HTTPS server** | **lmssl CLI & Schema** |
 | --- | --- | --- |
-| <img src="docs/images/https-steps.png" width="290"> | <img src="docs/images/serve-https.png" width="290"> | <img src="docs/images/lmssl-cli.png" width="290"> |
+| <img src="docs/images/https-steps.png" width="290" alt="https-steps"> | <img src="docs/images/serve-https.png" width="290" alt="serve-https"> | <img src="docs/images/lmssl-cli.png" width="290" alt="lmssl-cli"> |
 | DNS, TCP, TLS handshake messages, cipher negotiation, and HTTP response.<br>`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmssl/main/examples/https-steps.lms` | Local test HTTPS server with auto-generated certificate serving TLS 1.3.<br>`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmssl/main/examples/serve-https.lms` | Embedded OpenSSL 4.0.3 CLI and strongly typed DSL schema signatures.<br>`lmssl --version && lmssl --dsl-schema` |
 
 ## Quick start
