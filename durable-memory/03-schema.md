@@ -27,7 +27,7 @@ under four names); the schema split is only for readability in scripts.
 | `Out`, `Fs` | process I/O | `line/text/warn/fail`; `read/write/write_private/exists/mkdir/remove` |
 
 Free functions: `str_list`, `str_split`, `str_len`, `str_find`, `str_contains`, `str_starts_with`, `str_ends_with`,
-`str_substr`, `str_replace`, `str_trim`, `str_lower`, `str_to_int`. These are lmssl's own byte-oriented versions with the
+`str_substr`, `str_replace`, `str_trim`, `str_lower`, `str_to_int`. These use the shared SDK byte-oriented catalog with the
 same names as the SDK's optional string catalog; the catalog was not vendored because it also contains float parsing
 (`std::from_chars<double>`), which older Apple libc++ lacks, and lmssl needs only these twelve.
 
@@ -56,3 +56,9 @@ same names as the SDK's optional string catalog; the catalog was not vendored be
 CRLs/OCSP, PKCS#12/PKCS#7/CMS, DH/ECDH raw operations, session resumption, DTLS/QUIC, STARTTLS, X.509 name constraints,
 RSA-PSS parameters, provider selection. The CLI half covers them (`lmssl pkcs12`, `lmssl cms`, `lmssl ocsp`, ...);
 adding a schema type for any of them is mechanical (see 07).
+
+## Shared SDK catalogs
+
+The host registers `register_string` and `register_collections` from the pinned SDK. `Host::collections` owns native `Ssl.args`/`Net.resolve` lists and DSL-created string, integer and float lists and ordered maps for the run. The SDK StrList superset preserves len/at/add/join and adds set/contains/index_of/clear. Native OpenSSL objects retain their existing separate arena.
+
+`scripts/sync-sdk.sh` pins the VM and all four optional catalog headers by individual `sha256.<path>` entries in `sdk.lock`; `--verify` covers every vendored header. Schema functions and collection types copy the SDK fragments. SDK string rules intentionally require complete numeric tokens without whitespace, preserve NUL while trimming, and cap replacement results at 64 MiB. Collection bounds and empty-separator failures use the shared SDK messages and `RUN_HOST` codes.

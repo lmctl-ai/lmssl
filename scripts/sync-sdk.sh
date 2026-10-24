@@ -1,22 +1,38 @@
 #!/usr/bin/env bash
-# Vendor the single-source lmcode-cpp header and pin both its commit and content hash.
-set -eu
+# Vendor the VM and every SDK catalog header from one pinned commit.
+set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SDK="${LMCODE_CPP:-$HERE/../lmcode-cpp}"
 LOCK="$HERE/sdk.lock"
-HEADER="$HERE/cpp/dslvm.hpp"
-hash() { sha256sum "$1" | cut -c1-64; }
+hash() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -c1-64; }
 if [ "${1:-}" = "--verify" ]; then
   [ -f "$LOCK" ] || { echo "sdk.lock missing" >&2; exit 1; }
-  want="$(sed -n 's/^sha256=//p' "$LOCK")"
-  have="$(hash "$HEADER")"
-  [ "$want" = "$have" ] || { echo "cpp/dslvm.hpp sha256 $have differs from sdk.lock $want: run scripts/sync-sdk.sh" >&2; exit 1; }
-  echo "cpp/dslvm.hpp matches sdk.lock ($(sed -n 's/^commit=//p' "$LOCK"))"
+  count=0
+  while IFS='=' read -r key want; do
+    case "$key" in
+      sha256.cpp/*)
+        file="${key#sha256.}"
+        [ -f "$HERE/$file" ] && [ "$(hash "$HERE/$file")" = "$want" ] || { echo "$file differs from sdk.lock: run scripts/sync-sdk.sh" >&2; exit 1; }
+        count=$((count+1)) ;;
+    esac
+  done < "$LOCK"
+  [ "$count" -gt 0 ] || { echo "sdk.lock has no per-file hashes" >&2; exit 1; }
+  for file in "$HERE/cpp/dslvm.hpp" "$HERE"/cpp/stdlib/*.hpp; do
+    [ -f "$file" ] || { echo "missing SDK header: $file" >&2; exit 1; }
+    relative="${file#"$HERE/"}"
+    want="$(awk -F= -v key="sha256.$relative" '$1 == key {print $2}' "$LOCK")"
+    [ "$want" = "$(hash "$file")" ] || { echo "$relative is not pinned in sdk.lock" >&2; exit 1; }
+  done
+  echo "$count SDK headers match sdk.lock"
   exit 0
 fi
-[ -f "$SDK/include/dslvm.hpp" ] || { echo "lmcode-cpp checkout not found at $SDK (set LMCODE_CPP)" >&2; exit 1; }
 ref="${LMCODE_CPP_REF:-origin/main}"
 commit="$(git -C "$SDK" rev-parse "$ref")"
-git -C "$SDK" show "$commit:include/dslvm.hpp" > "$HEADER"
-printf 'repo=https://github.com/lmctl-ai/lmcode-cpp\ncommit=%s\nsha256=%s\n' "$commit" "$(hash "$HEADER")" > "$LOCK"
-echo "synced cpp/dslvm.hpp from lmcode-cpp $commit"
+mkdir -p "$HERE/cpp/stdlib"
+printf 'repo=https://github.com/lmctl-ai/lmcode-cpp\ncommit=%s\n' "$commit" > "$LOCK"
+while IFS= read -r source; do
+  case "$source" in include/dslvm.hpp) target=cpp/dslvm.hpp ;; stdlib/*.hpp) target="cpp/$source" ;; *) continue ;; esac
+  git -C "$SDK" show "$commit:$source" > "$HERE/$target"
+  printf 'sha256.%s=%s\n' "$target" "$(hash "$HERE/$target")" >> "$LOCK"
+done < <(git -C "$SDK" ls-tree -r --name-only "$commit" -- include/dslvm.hpp stdlib/)
+echo "synced SDK headers from lmcode-cpp $commit"

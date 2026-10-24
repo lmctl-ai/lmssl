@@ -1,4 +1,5 @@
 #include "host.hpp"
+#include "stdlib/string.hpp"
 
 #include <openssl/asn1.h>
 #include <openssl/bio.h>
@@ -412,7 +413,6 @@ struct Reg {
 Value str(std::string s) { return Value::string(std::move(s)); }
 Value none() { return Value::none(); }
 
-struct StrList { std::vector<std::string> items; };
 
 // ---------------------------------------------------------------- X509 building
 
@@ -698,74 +698,11 @@ void register_host(dslvm::Registry &reg, Host &host) {
   std::signal(SIGPIPE, SIG_IGN);
 #endif
 
-  auto strlist = [&g](std::vector<std::string> v) { return g.wrap("StrList", new StrList{std::move(v)}); };
-
-  // ---------------------------------------------------------------- free functions
-  g.function("str_list", {}, "StrList", [strlist](Args &) { return strlist({}); });
-  g.function("str_split", {"string", "string"}, "StrList", [strlist](Args &a) {
-    std::vector<std::string> v;
-    const std::string &s = a[0].s, &d = a[1].s;
-    if (d.empty()) throw std::runtime_error("empty separator");
-    size_t from = 0;
-    for (;;) {
-      size_t at = s.find(d, from);
-      if (at == std::string::npos) { v.push_back(s.substr(from)); break; }
-      v.push_back(s.substr(from, at - from));
-      from = at + d.size();
-    }
-    return strlist(std::move(v));
-  });
-  g.function("str_len", {"string"}, "int", [](Args &a) { return Value::integer(static_cast<int64_t>(a[0].s.size())); });
-  g.function("str_find", {"string", "string"}, "int", [](Args &a) {
-    size_t at = a[0].s.find(a[1].s);
-    return Value::integer(at == std::string::npos ? -1 : static_cast<int64_t>(at));
-  });
-  g.function("str_contains", {"string", "string"}, "bool", [](Args &a) { return Value::boolean(a[0].s.find(a[1].s) != std::string::npos); });
-  g.function("str_starts_with", {"string", "string"}, "bool", [](Args &a) { return Value::boolean(a[0].s.compare(0, a[1].s.size(), a[1].s) == 0); });
-  g.function("str_ends_with", {"string", "string"}, "bool", [](Args &a) {
-    return Value::boolean(a[0].s.size() >= a[1].s.size() && a[0].s.compare(a[0].s.size() - a[1].s.size(), a[1].s.size(), a[1].s) == 0);
-  });
-  g.function("str_substr", {"string", "int", "int"}, "string", [](Args &a) {
-    int64_t start = std::max<int64_t>(0, a[1].i), n = a[2].i;
-    if (n <= 0 || start >= static_cast<int64_t>(a[0].s.size())) return str("");
-    return str(a[0].s.substr(static_cast<size_t>(start), static_cast<size_t>(n)));
-  });
-  g.function("str_replace", {"string", "string", "string"}, "string", [](Args &a) {
-    std::string out = a[0].s;
-    if (a[1].s.empty()) return str(out);
-    size_t at = 0;
-    while ((at = out.find(a[1].s, at)) != std::string::npos) { out.replace(at, a[1].s.size(), a[2].s); at += a[2].s.size(); }
-    return str(out);
-  });
-  g.function("str_trim", {"string"}, "string", [](Args &a) {
-    const std::string &s = a[0].s;
-    size_t b = 0, e = s.size();
-    while (b < e && std::strchr(" \t\r\n\v\f", s[b])) ++b;
-    while (e > b && std::strchr(" \t\r\n\v\f", s[e - 1])) --e;
-    return str(s.substr(b, e - b));
-  });
-  g.function("str_lower", {"string"}, "string", [](Args &a) {
-    std::string s = a[0].s;
-    for (auto &c : s) if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + 32);
-    return str(s);
-  });
-  g.function("str_to_int", {"string"}, "int", [](Args &a) {
-    try { size_t used = 0; long long v = std::stoll(a[0].s, &used, 10); return Value::integer(used == a[0].s.size() ? v : 0); }
-    catch (...) { return Value::integer(0); }
-  });
-
-  // ---------------------------------------------------------------- StrList
-  g.method<StrList>("StrList", "len", {}, "int", [](StrList &l, Args &) { return Value::integer(static_cast<int64_t>(l.items.size())); });
-  g.method<StrList>("StrList", "at", {"int"}, "string", [](StrList &l, Args &a) {
-    if (a[0].i < 0 || a[0].i >= static_cast<int64_t>(l.items.size())) throw std::runtime_error("index " + std::to_string(a[0].i) + " out of range");
-    return str(l.items[static_cast<size_t>(a[0].i)]);
-  });
-  g.method<StrList>("StrList", "add", {"string"}, "StrList", [](StrList &l, Args &a) { l.items.push_back(a[0].s); return Value::object("StrList", &l); });
-  g.method<StrList>("StrList", "join", {"string"}, "string", [](StrList &l, Args &a) {
-    std::string out;
-    for (size_t i = 0; i < l.items.size(); ++i) { if (i) out += a[0].s; out += l.items[i]; }
-    return str(out);
-  });
+  dslvm::stdlib::register_string(reg);
+  dslvm::stdlib::register_collections(reg, host.collections);
+  auto strlist = [&host](std::vector<std::string> values) {
+    return Value::object("StrList", host.collections.make_str_list(std::move(values)));
+  };
 
   // ---------------------------------------------------------------- Out
   g.method<Host>("Out", "line", {"string"}, "void", [](Host &h, Args &a) { (h.json_mode ? std::cerr : std::cout) << a[0].s << "\n"; return none(); });

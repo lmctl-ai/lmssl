@@ -407,13 +407,13 @@ class Program {
         }
         case EQ: case NE: {
           Value b = pop(), a = pop();
-          if (a.kind != b.kind) throw Error(std::string("cannot compare ") + a.kind_name() + " with " + b.kind_name());
+          if (a.kind != b.kind) throw Error("RUN_ERROR", std::string("cannot compare ") + a.kind_name() + " with " + b.kind_name());
           bool eq = a.kind == Value::INT ? a.i == b.i : a.kind == Value::FLOAT ? a.f == b.f : a.kind == Value::STR ? a.s == b.s : a.kind == Value::BOOL ? a.b == b.b : a.obj == b.obj;
           push(Value::boolean(op == EQ ? eq : !eq)); break;
         }
         case ADD_I: case SUB_I: case MUL_I: case DIV_I: case MOD_I: case LT_I: case LE_I: case GT_I: case GE_I: {
           Value b = pop(), a = pop();
-          if (a.kind != Value::INT || b.kind != Value::INT) throw Error(std::string("int operator applied to ") + a.kind_name() + " and " + b.kind_name());
+          if (a.kind != Value::INT || b.kind != Value::INT) throw Error("RUN_ERROR", std::string("int operator applied to ") + a.kind_name() + " and " + b.kind_name());
           int64_t x = a.i, y = b.i; uint64_t ux = uint64_t(x), uy = uint64_t(y);
           switch (op) {
             case ADD_I: push(Value::integer(wrap(ux + uy))); break;
@@ -428,7 +428,7 @@ class Program {
         }
         case ADD_F: case SUB_F: case MUL_F: case DIV_F: case LT_F: case LE_F: case GT_F: case GE_F: {
           Value b = pop(), a = pop();
-          if (a.kind != Value::FLOAT || b.kind != Value::FLOAT) throw Error(std::string("float operator applied to ") + a.kind_name() + " and " + b.kind_name());
+          if (a.kind != Value::FLOAT || b.kind != Value::FLOAT) throw Error("RUN_ERROR", std::string("float operator applied to ") + a.kind_name() + " and " + b.kind_name());
           switch (op) {
             case ADD_F: push(Value::real(a.f + b.f)); break; case SUB_F: push(Value::real(a.f - b.f)); break;
             case MUL_F: push(Value::real(a.f * b.f)); break; case DIV_F: push(Value::real(a.f / b.f)); break;  // IEEE: inf/nan allowed
@@ -437,20 +437,20 @@ class Program {
           }
           break;
         }
-        case NEG_I: { Value a = pop(); if (a.kind != Value::INT) throw Error(std::string("int negation applied to ") + a.kind_name()); push(Value::integer(wrap(0 - uint64_t(a.i)))); break; }  // INT64_MIN wraps to itself
-        case NEG_F: { Value a = pop(); if (a.kind != Value::FLOAT) throw Error(std::string("float negation applied to ") + a.kind_name()); push(Value::real(-a.f)); break; }
-        case I2F: { Value a = pop(); if (a.kind != Value::INT) throw Error(std::string("float() applied to ") + a.kind_name()); push(Value::real(double(a.i))); break; }
+        case NEG_I: { Value a = pop(); if (a.kind != Value::INT) throw Error("RUN_ERROR", std::string("int negation applied to ") + a.kind_name()); push(Value::integer(wrap(0 - uint64_t(a.i)))); break; }  // INT64_MIN wraps to itself
+        case NEG_F: { Value a = pop(); if (a.kind != Value::FLOAT) throw Error("RUN_ERROR", std::string("float negation applied to ") + a.kind_name()); push(Value::real(-a.f)); break; }
+        case I2F: { Value a = pop(); if (a.kind != Value::INT) throw Error("RUN_ERROR", std::string("float() applied to ") + a.kind_name()); push(Value::real(double(a.i))); break; }
         case CONCAT: {
           Value b = pop(), a = pop();
-          if (a.kind != Value::STR || b.kind != Value::STR) throw Error(std::string("string + applied to ") + a.kind_name() + " and " + b.kind_name());
+          if (a.kind != Value::STR || b.kind != Value::STR) throw Error("RUN_ERROR", std::string("string + applied to ") + a.kind_name() + " and " + b.kind_name());
           push(Value::string(a.s + b.s)); break;
         }
-        case I2S: { Value a = pop(); if (a.kind != Value::INT) throw Error(std::string("str(int) applied to ") + a.kind_name()); push(Value::string(std::to_string(a.i))); break; }
+        case I2S: { Value a = pop(); if (a.kind != Value::INT) throw Error("RUN_ERROR", std::string("str(int) applied to ") + a.kind_name()); push(Value::string(std::to_string(a.i))); break; }
         case F2S: {  // %.15g: deterministic across hosts
-          Value a = pop(); if (a.kind != Value::FLOAT) throw Error(std::string("str(float) applied to ") + a.kind_name());
+          Value a = pop(); if (a.kind != Value::FLOAT) throw Error("RUN_ERROR", std::string("str(float) applied to ") + a.kind_name());
           char buf[64]; std::snprintf(buf, sizeof buf, "%.15g", a.f); push(Value::string(buf)); break;
         }
-        case B2S: { Value a = pop(); if (a.kind != Value::BOOL) throw Error(std::string("str(bool) applied to ") + a.kind_name()); push(Value::string(a.b ? "true" : "false")); break; }
+        case B2S: { Value a = pop(); if (a.kind != Value::BOOL) throw Error("RUN_ERROR", std::string("str(bool) applied to ") + a.kind_name()); push(Value::string(a.b ? "true" : "false")); break; }
         case MATH: {
           const uint8_t fn = r.u8();
           switch (fn) {
@@ -480,13 +480,13 @@ class Program {
         }
         case NOT: {
           Value a = pop();
-          if (a.kind != Value::BOOL) throw Error(std::string("! applied to a ") + a.kind_name());
+          if (a.kind != Value::BOOL) throw Error("RUN_ERROR", std::string("! applied to a ") + a.kind_name());
           push(Value::boolean(!a.b)); break;
         }
         case JUMP: jump(r.i32()); break;
         case JUMP_IF_FALSE: case JUMP_IF_TRUE: {
           int32_t rel = r.i32(); Value c = pop();
-          if (c.kind != Value::BOOL) throw Error(std::string("condition is a ") + c.kind_name() + ", not a bool");
+          if (c.kind != Value::BOOL) throw Error("RUN_ERROR", std::string("condition is a ") + c.kind_name() + ", not a bool");
           if (c.b == (op == JUMP_IF_TRUE)) jump(rel);
           break;
         }
