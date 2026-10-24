@@ -1,5 +1,5 @@
-// cpp-dsl-sdk: the C++ runtime for lmscript `_dsl_` bytecode. Header-only, C++17, standard library only.
-// Single source of truth: github.com/lmctl-ai/cpp-dsl-sdk/include/dslvm.hpp (hosts vendor it by pinned sha256, see README).
+// lmcode-cpp: the C++ runtime for lmscript `_dsl_` bytecode. Header-only, C++17, standard library only.
+// Single source of truth: github.com/lmctl-ai/lmcode-cpp/include/dslvm.hpp (hosts vendor it by pinned sha256, see README).
 //
 // Public API (everything else in this header is an implementation detail):
 //   dslvm::Error                         exception for load, verify and run-time failures: what() names the problem; code is one of

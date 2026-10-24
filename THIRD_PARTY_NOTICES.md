@@ -12,9 +12,9 @@ lmssl is distributed as one statically linked executable. It contains the follow
   stock `apps/openssl.cnf`, embedded and used only when the system has no OpenSSL configuration file.
 - Copyright (c) 1998-2026 The OpenSSL Project Authors; Copyright (c) 1995-1998 Eric A. Young, Tim J. Hudson.
 
-## cpp-dsl-sdk (`cpp/dslvm.hpp`)
+## lmcode-cpp (`cpp/dslvm.hpp`)
 
-- Source: <https://github.com/lmctl-ai/cpp-dsl-sdk>, vendored verbatim and pinned by SHA-256 in `sdk.lock`.
+- Source: <https://github.com/lmctl-ai/lmcode-cpp>, vendored verbatim and pinned by SHA-256 in `sdk.lock`.
 - License: MIT.
 
 ```
