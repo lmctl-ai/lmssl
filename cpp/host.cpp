@@ -1,5 +1,6 @@
 #include "host.hpp"
 #include "stdlib/string.hpp"
+#include "stdlib/testing.hpp"
 
 #include <openssl/asn1.h>
 #include <openssl/bio.h>
@@ -686,6 +687,7 @@ Value make_tls(Reg &g, TlsCtxObj &c, ConnObj &conn, const std::string &host) {
 // ================================================================ the schema
 
 void register_host(dslvm::Registry &reg, Host &host) {
+  dslvm::stdlib::register_testing(reg);
   auto reg_holder = std::make_shared<Reg>(Reg{reg, host});  // captured by reference by every registered closure
   host.arena.push_back(reg_holder);
   Reg &g = *reg_holder;
