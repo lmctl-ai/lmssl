@@ -1,0 +1,16 @@
+$ lmscript examples/selfsigned-wildcard.lms build/selfsigned.dslb
+$ lmssl --dsl build/selfsigned.dslb
+1. key:         EC on curve prime256v1, 256 bits
+   fingerprint: 33a156ffbf10b838ccd57f73a19130c5d39f60a0b8c4e40018d37dc43e5a8595   (sha256 of the public key)
+2. subject:     O=lmssl demo,CN=*.example.test
+   issuer:      O=lmssl demo,CN=*.example.test
+   serial:      4064251C2D9F841A
+   valid:       2026-10-24T20:28:14Z .. 2027-01-22T20:28:14Z
+   SANs:        DNS:*.example.test,DNS:example.test
+   signature:   ecdsa-with-SHA256 over a EC prime256v1 key
+   fingerprint: FC:F2:D3:2D:30:86:2F:5F:8F:05:26:17:4C:DC:0B:BD:AF:8F:34:A4:E1:A5:50:95:7B:96:7D:8E:97:68:00:26
+3. matches www.example.test: yes
+3. matches example.test: yes
+3. matches a.b.example.test: no
+3. matches example.org: no
+4. self-signed: signature verifies with the certificate's own public key

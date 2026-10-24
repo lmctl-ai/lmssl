@@ -1,0 +1,17 @@
+$ lmscript examples/crypto-basics.lms build/crypto.dslb
+$ lmssl --dsl build/crypto.dslb
+ok  sha256(abc) = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+ok  sha1(abc) = a9993e364706816aba3e25717850c26c9cd0d89d
+ok  md5(abc) = 900150983cd24fb0d6963f7d28e17f72
+ok  hmac-sha256 = 5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843
+ok  pbkdf2 = ea6c014dc72d6f8ccd1ed92ace1d41f0d8de8957
+ok  hex = 6c6d73736c
+ok  base64 = bG1zc2w=
+ok  unb64 = lmssl
+sealed      0bc7b668521533c2ad91b83646d943badae2045e13dead74a567985ee009   (30 bytes = 14 + 16 tag)
+ok  open = attack at dawn
+ok  chacha20-poly1305 = same API
+ed25519 sig 540829f9d97523b3d794b002b86ea37539ce8f5869c9ca94043e24bcc2e333c5d43f43d1b18a9e8d52a8eaf91247736018eba1234e86410c0f50acfdf3a48c02
+verifies   true
+tampered   false
+ecdsa      verifies=true tampered=false

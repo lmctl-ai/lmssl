@@ -1,0 +1,23 @@
+$ lmssl --dsl build/steps.dslb localhost 39441 /hello cert.pem
+=== request 1: https://localhost:39441/hello ===
+[1 dns]  localhost -> 127.0.0.1
+[2 tcp]  connected 127.0.0.1:50684 -> 127.0.0.1:39441
+[3 tls]  TLSv1.3, cipher TLS_AES_256_GCM_SHA384, key exchange group X25519MLKEM768
+         server signature algorithm ecdsa_secp256r1_sha256, ALPN 'http/1.1'
+         handshake messages:
+           ClientHello, Length=1554
+           ServerHello, Length=1206
+           EncryptedExtensions, Length=17
+           Certificate, Length=501
+           CertificateVerify, Length=74
+           Finished, Length=48
+           Finished, Length=48
+[4 pki]  verification: ok
+         #0 O=lmssl demo,CN=localhost   <- O=lmssl demo,CN=localhost
+            EC prime256v1, ecdsa-with-SHA256, valid until 2026-10-25T20:28:14Z
+         leaf names: DNS:localhost,DNS:*.localhost,IP:127.0.0.1,IP:::1
+         leaf covers localhost: true
+[5 http] HTTP/1.1 200 OK
+         Content-Type: text/plain
+         Content-Length: 124
+         body (first 124 bytes): hello from lmssl | protocol: TLSv1.3 | cipher:   TLS_AES_256_GCM_SHA384 | alpn:     http/1.1 | sni:      localhost | path:     /hello |

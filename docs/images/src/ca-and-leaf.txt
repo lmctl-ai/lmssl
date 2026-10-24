@@ -1,0 +1,16 @@
+$ lmscript examples/ca-and-leaf.lms build/ca-leaf.dslb
+$ lmssl --dsl build/ca-leaf.dslb
+CA        O=lmssl demo,CN=lmssl demo root CA  is_ca=true  self_signed=true
+CSR       O=lmssl demo,CN=app.example.test  signature_ok=true
+LEAF      O=lmssl demo,CN=app.example.test
+  issuer  O=lmssl demo,CN=lmssl demo root CA
+  SANs    DNS:app.example.test,DNS:*.apps.example.test
+  sigalg  ecdsa-with-SHA384
+signed by the CA:                true
+self-signed:                     false
+covers app.example.test:         true
+covers x.apps.example.test:      true
+covers example.test:             false
+signed by an impostor CA:        false
+check it with the OpenSSL command line:
+  lmssl verify -CAfile build/pki/ca.pem build/pki/server.pem

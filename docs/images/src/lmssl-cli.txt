@@ -1,0 +1,29 @@
+$ lmssl --version
+lmssl 0.1.0 (OpenSSL 4.0.3 29 Sep 2026)
+
+$ lmssl --dsl-schema
+context fs: Fs
+context net: Net
+context out: Out
+context ssl: Ssl
+fn float_list() -> FloatList
+fn int_list() -> IntList
+fn str_contains(string, string) -> bool
+fn str_ends_with(string, string) -> bool
+fn str_find(string, string) -> int
+fn str_is_float(string) -> bool
+fn str_is_int(string) -> bool
+fn str_len(string) -> int
+fn str_list() -> StrList
+fn str_lower(string) -> string
+fn str_map() -> StrMap
+fn str_match(string, string) -> bool
+fn str_repeat(string, int) -> string
+fn str_replace(string, string, string) -> string
+fn str_split(string, string) -> StrList
+fn str_starts_with(string, string) -> bool
+fn str_substr(string, int, int) -> string
+fn str_to_float(string) -> float
+fn str_to_int(string) -> int
+fn str_trim(string) -> string
+fn str_upper(string) -> string
