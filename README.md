@@ -20,6 +20,18 @@ lmssl --dsl build/https-steps.dslb google.com   # run compiled DSL bytecode agai
 - **Examples that explain.** [`examples/`](examples/) has self-signed wildcard certificates, a small CA, an HTTPS
   request split into DNS / TCP / TLS / PKI / HTTP steps (with the handshake messages printed), and a local HTTPS server.
 
+## Gallery
+
+| **Self-signed wildcard** | **CA & leaf certificate** | **Crypto basics** |
+| --- | --- | --- |
+| <img src="docs/images/selfsigned-wildcard.png" width="290"> | <img src="docs/images/ca-and-leaf.png" width="290"> | <img src="docs/images/crypto-basics.png" width="290"> |
+| EC key and self-signed wildcard certificate with SAN validation.<br>`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmssl/main/examples/selfsigned-wildcard.lms` | Root CA, server CSR, signed leaf certificate, and chain verification.<br>`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmssl/main/examples/ca-and-leaf.lms` | Digests, HMAC, PBKDF2, AES-256-GCM, ChaCha20-Poly1305, and Ed25519.<br>`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmssl/main/examples/crypto-basics.lms` |
+
+| **HTTPS handshake steps** | **Local HTTPS server** | **lmssl CLI & Schema** |
+| --- | --- | --- |
+| <img src="docs/images/https-steps.png" width="290"> | <img src="docs/images/serve-https.png" width="290"> | <img src="docs/images/lmssl-cli.png" width="290"> |
+| DNS, TCP, TLS handshake messages, cipher negotiation, and HTTP response.<br>`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmssl/main/examples/https-steps.lms` | Local test HTTPS server with auto-generated certificate serving TLS 1.3.<br>`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmssl/main/examples/serve-https.lms` | Embedded OpenSSL 4.0.3 CLI and strongly typed DSL schema signatures.<br>`lmssl --version && lmssl --dsl-schema` |
+
 ## Quick start
 
 ```sh
@@ -39,18 +51,6 @@ lmssl --dsl build/https-steps.dslb google.com          # follows google.com -> w
 It prints, per request, the DNS answers, the TCP endpoints, the negotiated TLS version / cipher / key-exchange group
 (`X25519MLKEM768` on OpenSSL 4), every handshake message with its length, the certificate chain with issuers, the result
 of verifying it against the system trust store, and the HTTP status line and headers.
-
-## Gallery
-
-| **Self-signed wildcard** | **CA & leaf certificate** | **Crypto basics** |
-| --- | --- | --- |
-| <img src="docs/images/selfsigned-wildcard.png" width="290"> | <img src="docs/images/ca-and-leaf.png" width="290"> | <img src="docs/images/crypto-basics.png" width="290"> |
-| EC key and self-signed wildcard certificate with SAN validation.<br>`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmssl/main/examples/selfsigned-wildcard.lms` | Root CA, server CSR, signed leaf certificate, and chain verification.<br>`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmssl/main/examples/ca-and-leaf.lms` | Digests, HMAC, PBKDF2, AES-256-GCM, ChaCha20-Poly1305, and Ed25519.<br>`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmssl/main/examples/crypto-basics.lms` |
-
-| **HTTPS handshake steps** | **Local HTTPS server** | **lmssl CLI & Schema** |
-| --- | --- | --- |
-| <img src="docs/images/https-steps.png" width="290"> | <img src="docs/images/serve-https.png" width="290"> | <img src="docs/images/lmssl-cli.png" width="290"> |
-| DNS, TCP, TLS handshake messages, cipher negotiation, and HTTP response.<br>`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmssl/main/examples/https-steps.lms` | Local test HTTPS server with auto-generated certificate serving TLS 1.3.<br>`lmctl autorun https://raw.githubusercontent.com/lmctl-ai/lmssl/main/examples/serve-https.lms` | Embedded OpenSSL 4.0.3 CLI and strongly typed DSL schema signatures.<br>`lmssl --version && lmssl --dsl-schema` |
 
 ## The DSL
 
