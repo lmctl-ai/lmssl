@@ -5,7 +5,7 @@
 //   dslvm::Error                         exception for load, verify and run-time failures: what() names the problem; code is one of
 //                                        LOAD_BAD_BYTECODE, LOAD_SCHEMA_MISMATCH, LOAD_UNBOUND, RUN_ERROR (VM), RUN_HOST (thrown by a host
 //                                        closure), APP_FAIL (the host's own application failure, see report_app_failure)
-//   dslvm::Value                         tagged value: VOID, INT (int64, two's complement), FLOAT (binary64), STR (UTF-8), BOOL, OBJ (host pointer + schema type name)
+//   dslvm::Value                         tagged value: VOID, INT (int64, two's complement), FLOAT (binary64), STR (arbitrary bytes), BOOL, OBJ (host pointer + schema type name)
 //   dslvm::Args                          std::vector<Value> of call arguments, in order
 //   dslvm::Registry                      the implementation of the schema, declared with its types: function(name, {param types}, return
 //                                        type, fn), method(type, name, {param types}, return type, fn), context(name, type); entries are
@@ -26,7 +26,7 @@
 //   dslvm::sha256 / hex / read_file      helpers the hosts use for the schema binding and files
 //
 // Bytecode v5 (big-endian, fixed widths, IEEE-754 binary64): magic "DSLB", u16 version 5, sha256(schema bytes);
-// constants: u32 count, each u8 tag (1 = string) + u32 length + UTF-8; imports: u16 count, each u32 constant index of a canonical
+// constants: u32 count, each u8 tag (1 = string) + u32 length + raw bytes; imports: u16 count, each u32 constant index of a canonical
 // signature (`fn NAME(T1, T2) -> R`, `method Type.name(T1) -> R`) resolved against the registry at load; context: u16 count,
 // each (u32 name constant, u32 type constant) checked against the registry's declarations; locals: u16 count, each (u32 type-name
 // constant, u8 hidden flag); u16 max_stack (the compiler's measured operand-stack depth: the VM reserves it, nothing is checked
@@ -53,6 +53,7 @@
 #include <fstream>
 #include <iostream>
 #include <functional>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <sstream>
@@ -144,10 +145,41 @@ struct FunctionEntry { Signature sig; Function fn; };
 struct MethodEntry { Signature sig; Method fn; };
 inline std::string signature_text(const Signature& s) { std::string out = "("; for (size_t i = 0; i < s.params.size(); ++i) out += (i ? ", " : "") + s.params[i]; return out + ") -> " + s.returns; }
 
+namespace stdlib { struct Collections; struct StdRuntime; }
+enum class StdMode { Enabled, Disabled };
+class Registry;
+inline Registry& register_std(Registry&);
+
 class Registry {
   struct NamedFunction { std::string name; FunctionEntry entry; };
   struct NamedMethod { std::string type, name; MethodEntry entry; };
  public:
+  explicit Registry(StdMode mode = StdMode::Enabled);
+  bool has_std() const { return std_initialized_; }
+  stdlib::Collections& std_collections() const;
+  void set_std_output(std::ostream* sink);
+  std::vector<std::string> std_signatures() const { return std_signatures_; }
+  std::vector<std::string> host_signatures() const {
+    auto all = signatures(); std::vector<std::string> out;
+    std::set_difference(all.begin(), all.end(), std_signatures_.begin(), std_signatures_.end(), std::back_inserter(out));
+    return out;
+  }
+  bool matches_schema_signatures(std::vector<std::string> expected) const {
+    expected.insert(expected.end(), std_signatures_.begin(), std_signatures_.end());
+    std::sort(expected.begin(), expected.end()); expected.erase(std::unique(expected.begin(), expected.end()), expected.end());
+    return signatures() == expected;
+  }
+  // One active run per shared std runtime; separate registries own independent runtimes.
+  class StdRunScope {
+   public:
+    explicit StdRunScope(const Registry& r) : registry_(r.has_std() ? &r : nullptr) { if (registry_) registry_->begin_std_run(); }
+    ~StdRunScope() { if (registry_) registry_->end_std_run(); }
+    StdRunScope(const StdRunScope&) = delete;
+    StdRunScope& operator=(const StdRunScope&) = delete;
+   private:
+    const Registry* registry_;
+  };
+  StdRunScope std_run_scope() const { return StdRunScope(*this); }
   // Type names are the schema's: int, float, string, bool, void (returns only) or an object type name. The arity the loader
   // checks is params.size(). Registering a name with the same parameter tuple twice is an error; distinct tuples are overloads.
   Registry& function(const std::string& name, std::vector<std::string> params, std::string returns, Function fn) {
@@ -193,6 +225,12 @@ class Registry {
     std::vector<std::string> have; for (auto& m : methods_) if (m.second.type + "." + m.second.name == name) have.push_back(m.first); std::sort(have.begin(), have.end()); std::string out; for (const auto& s : have) out += (out.empty() ? "" : ", ") + s; return out;
   }
  private:
+  friend Registry& register_std(Registry&);
+  void begin_std_run() const;
+  void end_std_run() const noexcept;
+  bool std_initialized_ = false;
+  std::vector<std::string> std_signatures_;
+  std::shared_ptr<stdlib::StdRuntime> std_runtime_;
   std::map<std::string, NamedFunction> functions_;
   std::map<std::string, NamedMethod> methods_;
   std::map<std::string, std::string> context_;
@@ -338,6 +376,7 @@ class Program {
 
   // Executes the chunk once. The host's objects come from ctx (declared names only).
   void run(const Context& ctx, const Registry& reg, RunStats* stats = nullptr) const {
+    auto std_scope = reg.std_run_scope();
     std::vector<Value> stack, locals(locals_.size());
     stack.reserve(max_stack_);
     Reader r(code_);
@@ -773,3 +812,12 @@ inline std::string read_file(const std::string& path) {
 }
 
 }  // namespace dslvm
+
+// Support the repository include/ layout and the hosts' pinned cpp/stdlib layout.
+#ifndef DSLVM_STD_DEFER
+#if __has_include("stdlib/std.hpp")
+#include "stdlib/std.hpp"
+#else
+#include "../stdlib/std.hpp"
+#endif
+#endif

@@ -1,5 +1,11 @@
 #pragma once
+#ifndef DSLVM_STD_BUILDING
+#define DSLVM_STD_DEFER
+#endif
 #include "dslvm.hpp"
+#ifndef DSLVM_STD_BUILDING
+#undef DSLVM_STD_DEFER
+#endif
 #include <algorithm>
 #include <deque>
 #include <utility>
@@ -75,6 +81,7 @@ template<class T> inline void register_collection_list(Registry& r, const std::s
 } // namespace detail
 
 inline Registry& register_collections(Registry& r, Collections& arena) {
+  if (r.has_std()) return r;
   detail::register_collection_list<std::string>(r, "StrList", "string");
   detail::register_collection_list<int64_t>(r, "IntList", "int");
   detail::register_collection_list<double>(r, "FloatList", "float");
@@ -126,3 +133,7 @@ inline Registry& register_collections(Registry& r, Collections& arena) {
   return r;
 }
 } // namespace dslvm::stdlib
+
+#ifndef DSLVM_STD_BUILDING
+#include "std.hpp"
+#endif

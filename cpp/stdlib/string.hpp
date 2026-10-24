@@ -2,7 +2,13 @@
 // Optional host-side string catalog for lmscript. These are ordinary host
 // functions: copy the signatures from string.schema-fragment.json into the
 // host schema, then call register_string(registry).
+#ifndef DSLVM_STD_BUILDING
+#define DSLVM_STD_DEFER
+#endif
 #include "dslvm.hpp"
+#ifndef DSLVM_STD_BUILDING
+#undef DSLVM_STD_DEFER
+#endif
 #include <algorithm>
 #include <charconv>
 #include <cctype>
@@ -217,6 +223,7 @@ inline bool str_match(const std::string& text, const std::string& pattern) {
 }
 
 inline Registry& register_string(Registry& r) {
+  if (r.has_std()) return r;
   r.function("str_starts_with", {"string", "string"}, "bool", [](Args& a) { return Value::boolean(str_starts_with(a[0].s, a[1].s)); });
   r.function("str_ends_with", {"string", "string"}, "bool", [](Args& a) { return Value::boolean(str_ends_with(a[0].s, a[1].s)); });
   r.function("str_contains", {"string", "string"}, "bool", [](Args& a) { return Value::boolean(str_contains(a[0].s, a[1].s)); });
@@ -237,3 +244,7 @@ inline Registry& register_string(Registry& r) {
 }
 
 } // namespace dslvm::stdlib
+
+#ifndef DSLVM_STD_BUILDING
+#include "std.hpp"
+#endif

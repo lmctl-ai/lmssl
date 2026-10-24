@@ -698,10 +698,8 @@ void register_host(dslvm::Registry &reg, Host &host) {
   std::signal(SIGPIPE, SIG_IGN);
 #endif
 
-  dslvm::stdlib::register_string(reg);
-  dslvm::stdlib::register_collections(reg, host.collections);
-  auto strlist = [&host](std::vector<std::string> values) {
-    return Value::object("StrList", host.collections.make_str_list(std::move(values)));
+  auto strlist = [&reg](std::vector<std::string> values) {
+    return Value::object("StrList", reg.std_collections().make_str_list(std::move(values)));
   };
 
   // ---------------------------------------------------------------- Out

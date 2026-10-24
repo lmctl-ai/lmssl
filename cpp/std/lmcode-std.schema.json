@@ -1,0 +1,560 @@
+{
+  "dsl.schema": 2,
+  "name": "lmcode_std_v1",
+  "functions": {
+    "assert_close": [
+      {
+        "params": [
+          "float",
+          "float",
+          "float"
+        ],
+        "returns": "void"
+      }
+    ],
+    "float_list": [
+      {
+        "params": [],
+        "returns": "FloatList"
+      }
+    ],
+    "int_list": [
+      {
+        "params": [],
+        "returns": "IntList"
+      }
+    ],
+    "math_abs": [
+      {
+        "params": [
+          "int"
+        ],
+        "returns": "int"
+      },
+      {
+        "params": [
+          "float"
+        ],
+        "returns": "float"
+      }
+    ],
+    "math_ceil": [
+      {
+        "params": [
+          "int"
+        ],
+        "returns": "int"
+      },
+      {
+        "params": [
+          "float"
+        ],
+        "returns": "float"
+      }
+    ],
+    "math_floor": [
+      {
+        "params": [
+          "int"
+        ],
+        "returns": "int"
+      },
+      {
+        "params": [
+          "float"
+        ],
+        "returns": "float"
+      }
+    ],
+    "math_max": [
+      {
+        "params": [
+          "int",
+          "int"
+        ],
+        "returns": "int"
+      },
+      {
+        "params": [
+          "float",
+          "float"
+        ],
+        "returns": "float"
+      }
+    ],
+    "math_min": [
+      {
+        "params": [
+          "int",
+          "int"
+        ],
+        "returns": "int"
+      },
+      {
+        "params": [
+          "float",
+          "float"
+        ],
+        "returns": "float"
+      }
+    ],
+    "math_pow": [
+      {
+        "params": [
+          "int",
+          "int"
+        ],
+        "returns": "int"
+      },
+      {
+        "params": [
+          "float",
+          "float"
+        ],
+        "returns": "float"
+      }
+    ],
+    "math_round": [
+      {
+        "params": [
+          "int"
+        ],
+        "returns": "int"
+      },
+      {
+        "params": [
+          "float"
+        ],
+        "returns": "float"
+      }
+    ],
+    "math_sqrt": [
+      {
+        "params": [
+          "int"
+        ],
+        "returns": "int"
+      },
+      {
+        "params": [
+          "float"
+        ],
+        "returns": "float"
+      }
+    ],
+    "print": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "void"
+      }
+    ],
+    "str_contains": [
+      {
+        "params": [
+          "string",
+          "string"
+        ],
+        "returns": "bool"
+      }
+    ],
+    "str_ends_with": [
+      {
+        "params": [
+          "string",
+          "string"
+        ],
+        "returns": "bool"
+      }
+    ],
+    "str_find": [
+      {
+        "params": [
+          "string",
+          "string"
+        ],
+        "returns": "int"
+      }
+    ],
+    "str_is_float": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "bool"
+      }
+    ],
+    "str_is_int": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "bool"
+      }
+    ],
+    "str_len": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "int"
+      }
+    ],
+    "str_list": [
+      {
+        "params": [],
+        "returns": "StrList"
+      }
+    ],
+    "str_lower": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "string"
+      }
+    ],
+    "str_map": [
+      {
+        "params": [],
+        "returns": "StrMap"
+      }
+    ],
+    "str_match": [
+      {
+        "params": [
+          "string",
+          "string"
+        ],
+        "returns": "bool"
+      }
+    ],
+    "str_repeat": [
+      {
+        "params": [
+          "string",
+          "int"
+        ],
+        "returns": "string"
+      }
+    ],
+    "str_replace": [
+      {
+        "params": [
+          "string",
+          "string",
+          "string"
+        ],
+        "returns": "string"
+      }
+    ],
+    "str_split": [
+      {
+        "params": [
+          "string",
+          "string"
+        ],
+        "returns": "StrList"
+      }
+    ],
+    "str_starts_with": [
+      {
+        "params": [
+          "string",
+          "string"
+        ],
+        "returns": "bool"
+      }
+    ],
+    "str_substr": [
+      {
+        "params": [
+          "string",
+          "int",
+          "int"
+        ],
+        "returns": "string"
+      }
+    ],
+    "str_to_float": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "float"
+      }
+    ],
+    "str_to_int": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "int"
+      }
+    ],
+    "str_trim": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "string"
+      }
+    ],
+    "str_upper": [
+      {
+        "params": [
+          "string"
+        ],
+        "returns": "string"
+      }
+    ]
+  },
+  "types": {
+    "FloatList": {
+      "methods": {
+        "add": [
+          {
+            "params": [
+              "float"
+            ],
+            "returns": "FloatList"
+          }
+        ],
+        "at": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "float"
+          }
+        ],
+        "clear": [
+          {
+            "params": [],
+            "returns": "FloatList"
+          }
+        ],
+        "contains": [
+          {
+            "params": [
+              "float"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "index_of": [
+          {
+            "params": [
+              "float"
+            ],
+            "returns": "int"
+          }
+        ],
+        "len": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "set": [
+          {
+            "params": [
+              "int",
+              "float"
+            ],
+            "returns": "FloatList"
+          }
+        ]
+      }
+    },
+    "IntList": {
+      "methods": {
+        "add": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "IntList"
+          }
+        ],
+        "at": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "int"
+          }
+        ],
+        "clear": [
+          {
+            "params": [],
+            "returns": "IntList"
+          }
+        ],
+        "contains": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "index_of": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "int"
+          }
+        ],
+        "len": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "set": [
+          {
+            "params": [
+              "int",
+              "int"
+            ],
+            "returns": "IntList"
+          }
+        ]
+      }
+    },
+    "StrList": {
+      "methods": {
+        "add": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "StrList"
+          }
+        ],
+        "at": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "string"
+          }
+        ],
+        "clear": [
+          {
+            "params": [],
+            "returns": "StrList"
+          }
+        ],
+        "contains": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "index_of": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "int"
+          }
+        ],
+        "join": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "string"
+          }
+        ],
+        "len": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "set": [
+          {
+            "params": [
+              "int",
+              "string"
+            ],
+            "returns": "StrList"
+          }
+        ]
+      }
+    },
+    "StrMap": {
+      "methods": {
+        "clear": [
+          {
+            "params": [],
+            "returns": "StrMap"
+          }
+        ],
+        "get": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "string"
+          }
+        ],
+        "get_or": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "string"
+          }
+        ],
+        "has": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "key_at": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "string"
+          }
+        ],
+        "len": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
+        "remove": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "bool"
+          }
+        ],
+        "set": [
+          {
+            "params": [
+              "string",
+              "string"
+            ],
+            "returns": "StrMap"
+          }
+        ]
+      }
+    }
+  }
+}

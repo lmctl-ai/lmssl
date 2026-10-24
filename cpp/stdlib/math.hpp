@@ -1,7 +1,13 @@
 #pragma once
 // Optional ordinary host functions. Copy math.schema-fragment.json into the
 // host schema and register once per registry; no VM opcodes are involved.
+#ifndef DSLVM_STD_BUILDING
+#define DSLVM_STD_DEFER
+#endif
 #include "dslvm.hpp"
+#ifndef DSLVM_STD_BUILDING
+#undef DSLVM_STD_DEFER
+#endif
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -59,6 +65,7 @@ inline int64_t math_sqrt(int64_t x) {
 inline double math_sqrt(double x) { return std::sqrt(x); }
 
 inline Registry& register_math(Registry& r) {
+  if (r.has_std()) return r;
   r.function("math_abs", {"int"}, "int", [](Args& a) { return Value::integer(math_abs(a[0].i)); });
   r.function("math_abs", {"float"}, "float", [](Args& a) { return Value::real(math_abs(a[0].f)); });
   r.function("math_min", {"int", "int"}, "int", [](Args& a) { return Value::integer(math_min(a[0].i, a[1].i)); });
@@ -79,3 +86,7 @@ inline Registry& register_math(Registry& r) {
 }
 
 } // namespace dslvm::stdlib
+
+#ifndef DSLVM_STD_BUILDING
+#include "std.hpp"
+#endif

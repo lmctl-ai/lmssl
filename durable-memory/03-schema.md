@@ -62,3 +62,9 @@ adding a schema type for any of them is mechanical (see 07).
 The host registers `register_string` and `register_collections` from the pinned SDK. `Host::collections` owns native `Ssl.args`/`Net.resolve` lists and DSL-created string, integer and float lists and ordered maps for the run. The SDK StrList superset preserves len/at/add/join and adds set/contains/index_of/clear. Native OpenSSL objects retain their existing separate arena.
 
 `scripts/sync-sdk.sh` pins the VM and all four optional catalog headers by individual `sha256.<path>` entries in `sdk.lock`; `--verify` covers every vendored header. Schema functions and collection types copy the SDK fragments. SDK string rules intentionally require complete numeric tokens without whitespace, preserve NUL while trimming, and cap replacement results at 64 MiB. Collection bounds and empty-separator failures use the shared SDK messages and `RUN_HOST` codes.
+
+## Built-in std
+
+Registry construction now installs std, so the host no longer registers catalogs or owns a collection arena. Native resolver/argument lists use registry.std_collections() during the run; Program::run clears standard collections at entry and exit. OpenSSL object ownership remains in the separate host arena.
+
+schema/lmssl.host.json is the checked-in host declaration source. CMake merges it with the pinned canonical cpp/std/lmcode-std.schema.json using scripts/merge-std.py and generates ignored schema/lmssl.dsl.json for existing examples and embedding. Exact effective bytes still bind current compiler/load operations. Signature checks cover both merged and normalized host-only schemas. Canonical JSON and the merge helper are pinned alongside the complete header bundle in sdk.lock.

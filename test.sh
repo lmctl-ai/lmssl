@@ -52,6 +52,9 @@ ok "--dsl-schema --json is byte-identical to the schema file"
 "$LMSCRIPT" --dsl-signatures schema/lmssl.dsl.json | tr -d '\r' > "$WORK/schema.sig"
 diff "$WORK/host.sig" "$WORK/schema.sig" > /dev/null || { diff "$WORK/host.sig" "$WORK/schema.sig" | head; fail "registry and schema signatures differ"; }
 ok "host registry signatures equal the compiler's view of the schema ($(wc -l < "$WORK/host.sig" | tr -d ' ') entries)"
+python3 scripts/merge-std.py --normalize-signatures schema/lmssl.host.json "$WORK/host-only.sig"
+diff "$WORK/host.sig" "$WORK/host-only.sig" >/dev/null || fail "host-only schema drift after std normalization"
+ok "host-only schema self-check accepts built-in std"
 
 # ---- it is still the OpenSSL command line
 "$HOST" version | grep -q '^OpenSSL 4' || fail "openssl version"

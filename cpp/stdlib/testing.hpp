@@ -5,9 +5,17 @@
 // The sink pointer is captured by the registered callbacks; when supplied it
 // must remain alive and writable for every call made through the registry. A
 // null sink selects std::cout at registration time.
+#ifndef DSLVM_STD_BUILDING
+#define DSLVM_STD_DEFER
+#endif
 #include "dslvm.hpp"
+#ifndef DSLVM_STD_BUILDING
+#undef DSLVM_STD_DEFER
+#endif
 #include <cmath>
-#include <cstdio>
+#include <iomanip>
+#include <locale>
+#include <sstream>
 #include <iostream>
 #include <ostream>
 #include <string>
@@ -23,12 +31,15 @@ inline void testing_assert_close(double a, double b, double tolerance) {
   // Keep this deliberately as an explicit comparison: equal infinities
   // subtract to NaN and therefore fail, as do NaN operands and tolerances.
   if (std::fabs(a - b) <= tolerance) return;
-  char message[160];
-  std::snprintf(message, sizeof(message), "assert_close failed: %.15g vs %.15g (tol %.15g)", a, b, tolerance);
-  throw Error(message);
+  // Match %.15g in the C locale without reading or changing the host's locale.
+  std::ostringstream message;
+  message.imbue(std::locale::classic());
+  message << std::setprecision(15) << "assert_close failed: " << a << " vs " << b << " (tol " << tolerance << ")";
+  throw Error(message.str());
 }
 
 inline Registry& register_testing(Registry& r, std::ostream* sink = nullptr) {
+  if (r.has_std()) { r.set_std_output(sink); return r; }
   std::ostream* output = sink ? sink : &std::cout;
   r.function("print", {"string"}, "void", [output](Args& a) {
     testing_print(*output, a[0].s);
@@ -42,3 +53,7 @@ inline Registry& register_testing(Registry& r, std::ostream* sink = nullptr) {
 }
 
 } // namespace dslvm::stdlib
+
+#ifndef DSLVM_STD_BUILDING
+#include "std.hpp"
+#endif

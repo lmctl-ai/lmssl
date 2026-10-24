@@ -5,3 +5,6 @@ build.log
 lmssl.lmctl
 p1.txt
 AGENTS.md
+
+# Generated compiler bridge schema; edit lmssl.host.json instead.
+/schema/lmssl.dsl.json

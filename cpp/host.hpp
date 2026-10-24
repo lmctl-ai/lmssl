@@ -9,7 +9,6 @@
 namespace lmssl {
 
 struct Host {
-  dslvm::stdlib::Collections collections;
   std::vector<std::shared_ptr<void>> arena;  // every object a script has been handed lives until the run ends
   std::vector<std::string> args;             // ssl.args(): the words after the bytecode file name
   bool json_mode = false;                    // --json: script output goes to stderr, stdout carries the result line
