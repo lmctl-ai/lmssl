@@ -1,9 +1,9 @@
 # A client with no trust anchors must refuse a self-signed server: handshake error, exit 3.
 # Run: lmssl --dsl fail-trust.dslb PORT
-p = _dsl_ schema="../schema/lmssl.dsl.json";
+p = _lmcode_ schema="../schema/lmssl.dsl.json";
 let conn = net.connect("localhost", str_to_int(ssl.args().at(0)));
 let ctx = ssl.client_ctx();
 let tls = ctx.connect(conn, "localhost");
 out.line("handshake unexpectedly succeeded");
-end _dsl_
+end _lmcode_
 savedsl(p, ARGV[0]);

@@ -8,7 +8,7 @@
 #   PORT 0 lets the OS choose; the chosen port is printed and written to DIR/port. The certificate is DIR/cert.pem:
 #   hand it to the client as its trust anchor (see https-steps.lms).
 out_path = ARGV.len() > 0 ? ARGV[0] : "build/serve-https.dslb";
-p = _dsl_ schema="../schema/lmssl.dsl.json";
+p = _lmcode_ schema="../schema/lmssl.dsl.json";
 let args = ssl.args();
 let port = 0;
 let requests = 1;
@@ -53,5 +53,5 @@ for (n in range(0, requests)) {
   tls.shutdown();
 }
 listener.close();
-end _dsl_
+end _lmcode_
 savedsl(p, out_path);

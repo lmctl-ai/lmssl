@@ -1,5 +1,5 @@
 # A flipped ciphertext bit must be rejected by the AEAD tag check: host error, exit 3.
-p = _dsl_ schema="../schema/lmssl.dsl.json";
+p = _lmcode_ schema="../schema/lmssl.dsl.json";
 let key = ssl.rand_hex(32);
 let iv = ssl.rand_hex(12);
 let sealed = ssl.seal("aes-256-gcm", key, iv, "", "payload");
@@ -7,5 +7,5 @@ let flipped = "ff" + str_substr(sealed, 2, 1000);
 if (str_substr(sealed, 0, 2) == "ff") { flipped = "00" + str_substr(sealed, 2, 1000); }
 out.line("opening a tampered message");
 out.line(ssl.open("aes-256-gcm", key, iv, "", flipped));
-end _dsl_
+end _lmcode_
 savedsl(p, ARGV[0]);

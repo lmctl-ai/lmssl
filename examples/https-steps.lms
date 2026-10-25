@@ -12,7 +12,7 @@
 #   Try:  HOST=google.com    -> a redirect to www.google.com to follow
 #         HOST=expired.badssl.com or self-signed.badssl.com  -> see the verification failure explained
 out_path = ARGV.len() > 0 ? ARGV[0] : "build/https-steps.dslb";
-p = _dsl_ schema="../schema/lmssl.dsl.json";
+p = _lmcode_ schema="../schema/lmssl.dsl.json";
 
 fn header_value(head: string, name: string) -> string {
   let low = str_lower(head);
@@ -119,5 +119,5 @@ while (more && hop < 5) {
   }
   tls.shutdown();
 }
-end _dsl_
+end _lmcode_
 savedsl(p, out_path);

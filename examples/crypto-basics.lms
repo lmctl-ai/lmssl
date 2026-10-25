@@ -4,7 +4,7 @@
 # Compile: lmscript examples/crypto-basics.lms build/crypto-basics.dslb
 # Run:     lmssl --dsl build/crypto-basics.dslb
 out_path = ARGV.len() > 0 ? ARGV[0] : "build/crypto-basics.dslb";
-p = _dsl_ schema="../schema/lmssl.dsl.json";
+p = _lmcode_ schema="../schema/lmssl.dsl.json";
 
 fn check(name: string, got: string, want: string) -> void {
   if (got != want) { out.fail(name + " mismatch: got " + got + ", want " + want); }
@@ -45,5 +45,5 @@ let ec = ssl.gen_ec("P-256");
 let esig = ec.sign("SHA256", "release v1.0");
 out.line("ecdsa      verifies=" + str(ec.verify("SHA256", "release v1.0", esig)) + " tampered=" + str(ec.verify("SHA256", "release v9", esig)));
 if (!ed.verify("", "release v1.0", sig) || ed.verify("", "release v1.1", sig)) { out.fail("signature check is wrong"); }
-end _dsl_
+end _lmcode_
 savedsl(p, out_path);

@@ -6,7 +6,7 @@
 # Compile: lmscript examples/ca-and-leaf.lms build/ca-and-leaf.dslb
 # Run:     lmssl --dsl build/ca-and-leaf.dslb [OUTDIR]        (default OUTDIR: build/pki)
 out_path = ARGV.len() > 0 ? ARGV[0] : "build/ca-and-leaf.dslb";
-p = _dsl_ schema="../schema/lmssl.dsl.json";
+p = _lmcode_ schema="../schema/lmssl.dsl.json";
 let dir = "build/pki";
 if (ssl.args().len() > 0) { dir = ssl.args().at(0); }
 fs.mkdir(dir);
@@ -58,5 +58,5 @@ out.line("signed by an impostor CA:        " + str(leaf.verify_with(other)));
 if (!leaf.verify_with(ca) || leaf.verify_with(other)) { out.fail("chain check is wrong"); }
 out.line("check it with the OpenSSL command line:");
 out.line("  lmssl verify -CAfile " + dir + "/ca.pem " + dir + "/server.pem");
-end _dsl_
+end _lmcode_
 savedsl(p, out_path);

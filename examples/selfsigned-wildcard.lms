@@ -8,7 +8,7 @@
 # Compile: lmscript examples/selfsigned-wildcard.lms build/selfsigned-wildcard.dslb
 # Run:     lmssl --dsl build/selfsigned-wildcard.dslb [OUTDIR]     (default OUTDIR: build/wildcard)
 out_path = ARGV.len() > 0 ? ARGV[0] : "build/selfsigned-wildcard.dslb";
-p = _dsl_ schema="../schema/lmssl.dsl.json";
+p = _lmcode_ schema="../schema/lmssl.dsl.json";
 let dir = "build/wildcard";
 if (ssl.args().len() > 0) { dir = ssl.args().at(0); }
 fs.mkdir(dir);
@@ -49,5 +49,5 @@ for (h in hosts) {
 }
 if (!cert.self_signed()) { out.fail("certificate should verify against its own key"); }
 out.line("4. self-signed: signature verifies with the certificate's own public key");
-end _dsl_
+end _lmcode_
 savedsl(p, out_path);

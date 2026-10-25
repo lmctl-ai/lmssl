@@ -59,14 +59,14 @@ A script is a `_dsl_` block in a normal `.lms` file. The block is a small strong
 `lmssl` refuses bytecode compiled against any other schema before it runs anything.
 
 ```
-p = _dsl_ schema="schema/lmssl.dsl.json";
+p = _lmcode_ schema="schema/lmssl.dsl.json";
 let key = ssl.gen_ec("P-256");
 let cert = ssl.new_cert(key, "CN=*.example.test");
 cert.san("DNS:*.example.test,DNS:example.test");
 cert.valid_days(90);
 cert.sign_self(key, "SHA256");
 fs.write("cert.pem", cert.pem());
-end _dsl_
+end _lmcode_
 savedsl(p, "cert.dslb");
 ```
 
