@@ -17,7 +17,7 @@ Asset names `lmssl-linux-x64`, `-linux-arm64`, `-macos-x64`, `-macos-arm64`, `-w
 `lmssl --version` starts with `lmssl <tag without v>`; bump `project(lmssl VERSION ...)` in `CMakeLists.txt` before tagging.
 Docs-only pushes (`durable-memory/**`, `*.md`) skip CI; tag pushes always build. `workflow_dispatch` takes an `only` input.
 
-The lmscript compiler comes from `npm i -g @lmctl-ai/lmctl@0.2.419` (DSL v5); `scripts/select-compiler.sh` probes that
+The lmscript compiler comes from `npm i -g @lmctl-ai/lmctl@0.2.420` (DSL v5); `scripts/select-compiler.sh` probes that
 the emitted bytecode starts with `DSLB\0\5`.
 
 ## Platform bugs found (in the order CI showed them)

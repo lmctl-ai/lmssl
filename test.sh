@@ -55,6 +55,17 @@ ok "host registry signatures equal the compiler's view of the schema ($(wc -l < 
 python3 scripts/merge-std.py --normalize-signatures schema/lmssl.host.json "$WORK/host-only.sig"
 diff "$WORK/host.sig" "$WORK/host-only.sig" >/dev/null || fail "host-only schema drift after std normalization"
 ok "host-only schema self-check accepts built-in std"
+"$LMSCRIPT" --dsl-signatures schema/lmssl.host.json --without-std > "$WORK/host-only-compiler.sig"
+"$LMSCRIPT" --dsl-signatures cpp/std/lmcode-std.schema.json > "$WORK/std.sig"
+python3 - "$WORK/host.sig" "$WORK/std.sig" "$WORK/host-only-registry.sig" <<'PYCOMPARE'
+import pathlib,sys
+full,std,out=map(pathlib.Path,sys.argv[1:])
+out.write_text(''.join(line+'\n' for line in sorted(set(full.read_text().splitlines())-set(std.read_text().splitlines()))))
+PYCOMPARE
+diff "$WORK/host-only-compiler.sig" "$WORK/host-only-registry.sig" || fail "host-only registry/compiler parity"
+cmp schema/lmssl.host.json schema/lmssl.dsl.json || fail "schema generation reintroduced std"
+ok "host-only bytes and --without-std registry parity"
+
 
 # ---- it is still the OpenSSL command line
 "$HOST" version | grep -q '^OpenSSL 4' || fail "openssl version"

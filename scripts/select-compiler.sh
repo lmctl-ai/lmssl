@@ -2,21 +2,24 @@
 # Select by emitted bytecode capability, not CLI version or schema support alone.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-if [ -n "${LMSCRIPT_BIN:-}" ]; then
-  printf '%s\n' "$LMSCRIPT_BIN"
-  exit 0
-fi
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/lmssl-compiler-XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 # A native (mingw) python cannot see MSYS /tmp paths: hand it drive-letter paths when cygpath exists.
 native() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
-candidate="$(command -v lmscript || true)"
-python3 "$(native "$HERE/scripts/merge-std.py")" "$(native "$HERE/schema/lmssl.host.json")" "$(native "$WORK/probe.schema.json")"
+candidate="${LMSCRIPT_BIN:-$(command -v lmscript || true)}"
+printf '%s\n' '{"dsl.schema":2,"name":"compiler_probe","types":{},"functions":{},"context":{}}' > "$WORK/probe.schema.json"
+version="$("$candidate" --version 2>/dev/null || true)"
+python3 - "$version" <<'PYVERSION'
+import re,sys
+match=re.search(r'\b(\d+)\.(\d+)\.(\d+)\b',sys.argv[1])
+if not match or tuple(map(int,match.groups())) < (0,2,420):
+    sys.exit('error: lmscript >= 0.2.420 is required; install @lmctl-ai/lmctl@0.2.420')
+PYVERSION
 # JSON string quoting also supports checkouts whose paths contain spaces/quotes.
 python3 - "$(native "$WORK/probe.schema.json")" "$(native "$WORK")" <<'PY'
 import json,pathlib,sys
 work=pathlib.Path(sys.argv[2])
-(work/'probe.lms').write_text('p = _dsl_ schema='+json.dumps(sys.argv[1])+';\nwhile (false) {}\nend _dsl_\nsavedsl(p, '+json.dumps(str(work/'probe.dslb'))+');\n')
+(work/'probe.lms').write_text('p = _dsl_ schema='+json.dumps(sys.argv[1])+';\nlet n = str_len("implicit std");\nend _dsl_\nsavedsl(p, '+json.dumps(str(work/'probe.dslb'))+');\n')
 PY
 if [ -n "$candidate" ] &&
    "$candidate" --dsl-signatures "$WORK/probe.schema.json" > /dev/null 2>&1 &&
@@ -36,6 +39,6 @@ else
     [ -n "$candidate" ] && "$candidate" "$WORK/probe.lms" "$WORK/probe.dslb" 2>&1 | head -10 >&2
     ls -la "$WORK" >&2
   fi
-  echo "error: no DSL v5 compiler found; install @lmctl-ai/lmctl so lmscript is on PATH, or set LMSCRIPT_BIN" >&2
+  echo "error: no implicit-std DSL v5 compiler found; install @lmctl-ai/lmctl@0.2.420 so lmscript is on PATH, or set LMSCRIPT_BIN" >&2
   exit 2
 fi

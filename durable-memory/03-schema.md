@@ -67,8 +67,10 @@ The host registers `register_string` and `register_collections` from the pinned 
 
 Registry construction now installs std, so the host no longer registers catalogs or owns a collection arena. Native resolver/argument lists use registry.std_collections() during the run; Program::run clears standard collections at entry and exit. OpenSSL object ownership remains in the separate host arena.
 
-schema/lmssl.host.json is the checked-in host declaration source. CMake merges it with the pinned canonical cpp/std/lmcode-std.schema.json using scripts/merge-std.py and generates ignored schema/lmssl.dsl.json for existing examples and embedding. Exact effective bytes still bind current compiler/load operations. Signature checks cover both merged and normalized host-only schemas. Canonical JSON and the merge helper are pinned alongside the complete header bundle in sdk.lock.
+schema/lmssl.host.json is the checked-in host declaration source. CMake copies its exact bytes to ignored schema/lmssl.dsl.json for existing examples and embedding. Exact effective bytes still bind current compiler/load operations. Signature checks cover both merged and normalized host-only schemas. Canonical JSON and the merge helper are pinned alongside the complete header bundle in sdk.lock.
 
 The built-in standard excludes testing helpers. The host schema explicitly declares `print` and `assert_close`, and host registration explicitly binds the optional SDK testing catalog, preserving the previous public signatures.
 
 The pinned standard also supplies `file_read`, `file_write`, `file_append`, `file_exists`, and `file_lines` on raw bytes and native process-cwd paths. `file_lines` splits LF while retaining CR and trailing empty fields. SDK synchronization now pins nine artifacts, including `stdlib/file.hpp`.
+
+Compiler minimum 0.2.420 resolves std implicitly; embedded bytes are host-only, and tests compare full and `--without-std` registry surfaces while optional testing remains host-declared.

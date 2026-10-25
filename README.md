@@ -94,7 +94,7 @@ scripts/sync-openssl.sh      # shallow-clones the OpenSSL tag pinned in openssl.
 ./test.sh                    # configures, builds (OpenSSL first: a few minutes), and runs all checks
 ```
 
-Needs `cmake` >= 3.24, a C/C++17 toolchain, `perl`, `make`, and `lmscript` for the tests. The result is `build/lmssl`.
+Needs `lmscript` >= 0.2.420, `cmake` >= 3.24, a C/C++17 toolchain, `perl`, `make`, and `lmscript` for the tests. The result is `build/lmssl`.
 Design notes are in [`durable-memory/`](durable-memory/index.md).
 
 ## License

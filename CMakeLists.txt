@@ -9,17 +9,9 @@ endif()
 option(LMSSL_FULL_STATIC "Link the complete executable statically" ON)
 
 # ---- schema embedded as bytes: the binary prints exactly what the compiler hashed
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(LMSSL_HOST_SCHEMA "${CMAKE_CURRENT_SOURCE_DIR}/schema/lmssl.host.json")
-set(LMSSL_STD_SCHEMA "${CMAKE_CURRENT_SOURCE_DIR}/cpp/std/lmcode-std.schema.json")
-set(LMSSL_STD_MERGER "${CMAKE_CURRENT_SOURCE_DIR}/scripts/merge-std.py")
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${LMSSL_HOST_SCHEMA}" "${LMSSL_STD_SCHEMA}" "${LMSSL_STD_MERGER}")
-execute_process(COMMAND "${Python3_EXECUTABLE}" "${LMSSL_STD_MERGER}" "${LMSSL_HOST_SCHEMA}"
-  "${CMAKE_CURRENT_SOURCE_DIR}/schema/lmssl.dsl.json" RESULT_VARIABLE LMSSL_STD_RESULT ERROR_VARIABLE LMSSL_STD_ERROR)
-if(NOT LMSSL_STD_RESULT EQUAL 0)
-  message(FATAL_ERROR "Cannot merge built-in std: ${LMSSL_STD_ERROR}")
-endif()
 set(LMSSL_SCHEMA "${CMAKE_CURRENT_SOURCE_DIR}/schema/lmssl.dsl.json")
+configure_file("${LMSSL_HOST_SCHEMA}" "${LMSSL_SCHEMA}" COPYONLY)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${LMSSL_SCHEMA}")
 file(READ "${LMSSL_SCHEMA}" LMSSL_SCHEMA_HEX HEX)
 string(LENGTH "${LMSSL_SCHEMA_HEX}" LMSSL_SCHEMA_HEX_LENGTH)
