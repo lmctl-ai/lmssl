@@ -60,7 +60,7 @@ ok "host-only schema self-check accepts built-in std"
 python3 - "$WORK/host.sig" "$WORK/std.sig" "$WORK/host-only-registry.sig" <<'PYCOMPARE'
 import pathlib,sys
 full,std,out=map(pathlib.Path,sys.argv[1:])
-out.write_text(''.join(line+'\n' for line in sorted(set(full.read_text().splitlines())-set(std.read_text().splitlines()))))
+out.write_bytes(''.join(line+'\n' for line in sorted(set(full.read_text().splitlines())-set(std.read_text().splitlines()))).encode('utf-8'))
 PYCOMPARE
 diff "$WORK/host-only-compiler.sig" "$WORK/host-only-registry.sig" || fail "host-only registry/compiler parity"
 cmp schema/lmssl.host.json schema/lmssl.dsl.json || fail "schema generation reintroduced std"
