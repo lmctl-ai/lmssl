@@ -785,6 +785,12 @@
             "returns": "string"
           }
         ],
+        "monotonic_us": [
+          {
+            "params": [],
+            "returns": "int"
+          }
+        ],
         "hex": [
           {
             "params": [

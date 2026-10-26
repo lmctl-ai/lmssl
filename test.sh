@@ -91,6 +91,32 @@ run "$WORK/crypto.dslb" > "$WORK/crypto.txt" || fail "crypto-basics"
 grep -q '^ok  sha256(abc) = ba7816bf' "$WORK/crypto.txt" && grep -q '^ok  open = attack at dawn' "$WORK/crypto.txt" || fail "crypto-basics output"
 ok "example crypto-basics (digest, HMAC, PBKDF2, AEAD, signatures)"
 
+compile tests/monotonic.lms "$WORK/monotonic.dslb"
+python3 - "$WORK/delay.port" <<'PYDELAY' &
+import pathlib, socket, sys, time
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.bind(("127.0.0.1", 0))
+s.listen(1)
+pathlib.Path(sys.argv[1]).write_text(str(s.getsockname()[1]))
+conn, _ = s.accept()
+time.sleep(0.05)
+conn.sendall(b"x")
+conn.close()
+s.close()
+PYDELAY
+SERVERS+=($!)
+for _ in $(seq 1 100); do [ -s "$WORK/delay.port" ] && break; sleep 0.05; done
+run "$WORK/monotonic.dslb" "$(cat "$WORK/delay.port")" > "$WORK/monotonic.txt" || fail "monotonic_us"
+python3 - "$WORK/monotonic.txt" <<'PYMONO' || fail "monotonic_us delta check"
+import pathlib, re, sys
+txt = pathlib.Path(sys.argv[1]).read_text()
+m = re.search(r"monotonic delta_us=(\d+)", txt)
+assert m, f"unexpected output: {txt}"
+delta = int(m.group(1))
+assert 30000 <= delta <= 1000000, f"expected ~50000 us delta across 50 ms wait, got {delta}"
+PYMONO
+ok "ssl.monotonic_us (nonnegative, monotonic, advances across 50 ms wait)"
+
 compile examples/selfsigned-wildcard.lms "$WORK/wild.dslb"
 run "$WORK/wild.dslb" "$WORK/wild" > "$WORK/wild.txt" || fail "selfsigned-wildcard"
 grep -q 'matches www.example.test: yes' "$WORK/wild.txt" && grep -q 'matches a.b.example.test: no' "$WORK/wild.txt" || fail "wildcard matching output"

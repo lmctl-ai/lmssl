@@ -14,7 +14,7 @@ under four names); the schema split is only for readability in scripts.
 
 | Type | Role | Notes |
 | --- | --- | --- |
-| `Ssl` | factory and utility | `version`, `args`, `now`; `hex/unhex/b64/unb64`; `rand_bytes/rand_hex`; `digest`, `hmac`, `pbkdf2`, `seal`/`open`; `gen_rsa/gen_ec/gen_ed25519`, `load_key` (+ passphrase overload), `parse_key`; `new_cert`, `cert_from_csr`, `load_cert`, `parse_cert`, `new_csr`, `load_csr`; `client_ctx`, `server_ctx` |
+| `Ssl` | factory and utility | `version`, `args`, `now`, `monotonic_us`; `hex/unhex/b64/unb64`; `rand_bytes/rand_hex`; `digest`, `hmac`, `pbkdf2`, `seal`/`open`; `gen_rsa/gen_ec/gen_ed25519`, `load_key` (+ passphrase overload), `parse_key`; `new_cert`, `cert_from_csr`, `load_cert`, `parse_cert`, `new_csr`, `load_csr`; `client_ctx`, `server_ctx` |
 | `Key` | `EVP_PKEY` | inspect (`type`, `bits`, `curve`, `text`, `fingerprint`), export (`pem`, `public_pem`, `save`, `save_encrypted`), `sign`/`verify` (Ed25519 ignores the digest argument) |
 | `Cert` | `X509` | builder + inspector (below) |
 | `Csr` | `X509_REQ` | `san` collects names; `sign(key, digest)` adds them as a requested extension and signs; `verify` checks the self-signature |

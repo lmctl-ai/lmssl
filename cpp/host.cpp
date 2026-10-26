@@ -96,6 +96,14 @@ Bio mem_bio() {
 
 // ---------------------------------------------------------------- helpers
 
+const auto kProcessOrigin = std::chrono::steady_clock::now();
+
+int64_t monotonic_us() {
+  auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::steady_clock::now() - kProcessOrigin).count();
+  return elapsed < 0 ? 0 : static_cast<int64_t>(elapsed);
+}
+
 std::string to_hex(const unsigned char *p, size_t n) {
   static const char d[] = "0123456789abcdef";
   std::string out;
@@ -1117,6 +1125,9 @@ void register_host(dslvm::Registry &reg, Host &host) {
     char buf[32];
     std::strftime(buf, sizeof buf, "%Y-%m-%dT%H:%M:%SZ", &tm);
     return str(buf);
+  });
+  g.method<Host>("Ssl", "monotonic_us", {}, "int", [](Host &, Args &) {
+    return Value::integer(monotonic_us());
   });
   g.method<Host>("Ssl", "hex", {"string"}, "string", [](Host &, Args &a) { return str(to_hex(a[0].s)); });
   g.method<Host>("Ssl", "unhex", {"string"}, "string", [](Host &, Args &a) { return str(from_hex(a[0].s)); });

@@ -74,7 +74,7 @@ savedsl(p, "cert.dslb");
 
 | Context | What it is |
 | --- | --- |
-| `ssl` | version, encodings, random, digests, HMAC, PBKDF2, AEAD (`seal`/`open`), key generation and loading, certificate / CSR creation and parsing, TLS contexts |
+| `ssl` | version, clock (`now`, `monotonic_us`), encodings, random, digests, HMAC, PBKDF2, AEAD (`seal`/`open`), key generation and loading, certificate / CSR creation and parsing, TLS contexts |
 | `net` | `resolve`, `connect`, `listen`, `timeout` |
 | `fs`, `out` | files (private keys are written mode 0600), output (`line`, `warn`, `fail`) |
 

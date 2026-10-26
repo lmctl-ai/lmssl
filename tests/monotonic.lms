@@ -1,0 +1,25 @@
+# Monotonic microsecond clock: nonnegative, nondecreasing, and advances across a short wait.
+p = _lmcode_ schema="../schema/lmssl.dsl.json";
+let prev = ssl.monotonic_us();
+if (prev < 0) { out.fail("negative monotonic_us: " + str(prev)); }
+for (i in range(0, 64)) {
+  let cur = ssl.monotonic_us();
+  if (cur < prev) { out.fail("monotonic_us went backwards: " + str(cur) + " < " + str(prev)); }
+  prev = cur;
+}
+let args = ssl.args();
+let t0 = ssl.monotonic_us();
+if (args.len() > 0) {
+  let conn = net.connect("127.0.0.1", str_to_int(args.at(0)));
+  let b = conn.read(1);
+  if (str_len(b) != 1) { out.fail("expected 1 byte from delay peer"); }
+  conn.close();
+} else {
+  let dk = ssl.pbkdf2("password", "salt", 50000, "SHA256", 32);
+  if (str_len(dk) != 64) { out.fail("pbkdf2 output length mismatch"); }
+}
+let t1 = ssl.monotonic_us();
+if (t1 <= t0) { out.fail("monotonic_us did not advance: " + str(t0) + " -> " + str(t1)); }
+out.line("monotonic delta_us=" + str(t1 - t0));
+end _lmcode_
+savedsl(p, ARGV[0]);
