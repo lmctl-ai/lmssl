@@ -9,14 +9,6 @@ on:
         default: "all"
         type: choice
         options: [all, linux-x64, linux-arm64, macos-arm64, macos-x64, windows-x64]
-  push:
-    branches: [main]
-    tags: ["v*"]
-    # docs-only pushes do not need the 5-OS matrix; path filters are not evaluated for tag pushes,
-    # so releases always build
-    paths-ignore: ["durable-memory/**", "**.md"]
-  pull_request:
-    paths-ignore: ["durable-memory/**", "**.md"]
 
 # Least privilege: build jobs only read; the release job alone gets contents: write.
 permissions:
