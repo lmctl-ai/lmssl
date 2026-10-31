@@ -7,7 +7,7 @@ proves the OpenSSL build and the link.
 | --- | --- |
 | pins | `sdk.lock` hash of `cpp/dslvm.hpp`; `openssl.lock` commit equals `third_party/openssl` HEAD |
 | build | configure + build succeeds; on Linux `ldd` reports "not a dynamic executable" |
-| protocol | `--version`; `--dsl-schema --json` is byte-identical to the schema file; host signatures equal `lmscript --dsl-signatures` |
+| protocol | `--version`; `--lmcode-schema --json` is byte-identical to the schema file; host signatures equal `lmscript --lmcode-signatures` |
 | CLI half | `version`, `dgst`, `req -x509` (needs the embedded `openssl.cnf`), `x509` work from the same binary |
 | examples | each example is compiled and run; outputs are checked, then **cross-checked by the other half**: `openssl verify` of the DSL-made chain, `x509 -ext subjectAltName` of the wildcard, `req -verify` of the DSL-made CSR, key file mode 0600 |
 | TLS | `serve-https` + `https-steps` with a redirect (`/old` -> `/new`), handshake trace and chain; `s_client` (CLI half) against the DSL server; mutual TLS where the server reads the client certificate subject |

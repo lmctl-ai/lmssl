@@ -86,14 +86,22 @@ struct StrMap {
 // Stable addresses for the whole run. Keep this arena and its registry alive
 // while any handle is in use. Reset only between runs, after all handles expire.
 struct Collections {
+  std::vector<std::shared_ptr<void>> objects;
   std::deque<StrList> str_lists;
   std::deque<IntList> int_lists;
   std::deque<FloatList> float_lists;
   std::deque<StrMap> str_maps;
-  size_t size() const { return str_lists.size() + int_lists.size() + float_lists.size() + str_maps.size(); }
-  void reset() { str_lists.clear(); int_lists.clear(); float_lists.clear(); str_maps.clear(); }
+  size_t size() const { return objects.size() + str_lists.size() + int_lists.size() + float_lists.size() + str_maps.size(); }
+  void reset() { objects.clear(); str_lists.clear(); int_lists.clear(); float_lists.clear(); str_maps.clear(); }
   void reserve_object(const char* type) const {
     if (size() >= 65536) throw Error(std::string(type) + " object limit exceeded (65536)");
+  }
+  template<class T, class... Args> T* make_object(const char* type, Args&&... args) {
+    reserve_object(type);
+    auto value = std::make_shared<T>(std::forward<Args>(args)...);
+    auto* pointer = value.get();
+    objects.push_back(std::move(value));
+    return pointer;
   }
   StrList* make_str_list(std::vector<std::string> values = {}) { reserve_object("StrList"); str_lists.push_back({std::move(values)}); return &str_lists.back(); }
   IntList* make_int_list(std::vector<int64_t> values = {}) { reserve_object("IntList"); int_lists.push_back({std::move(values)}); return &int_lists.back(); }
@@ -196,6 +204,18 @@ inline Registry& register_collections(Registry& r, Collections& arena) {
     const size_t pos = found->second; map.index.erase(found); map.remove_rank(pos); --map.active; return Value::boolean(true);
   });
   r.method("StrMap", "clear", {}, "StrMap", [](void* p, Args&) { auto& map = *static_cast<StrMap*>(p); map.items.clear(); map.index.clear(); map.active = 0; map.fenwick.clear(); return Value::object("StrMap", p); });
+  r.method("StrMap", "keys", {}, "StrList", [&arena](void* p, Args&) {
+    const auto& map = *static_cast<StrMap*>(p);
+    std::vector<std::string> values; values.reserve(map.active);
+    for (size_t i = 0; i < map.items.size(); ++i) if (map.live(i)) values.push_back(map.items[i].first);
+    return Value::object("StrList", arena.make_str_list(std::move(values)));
+  });
+  r.method("StrMap", "values", {}, "StrList", [&arena](void* p, Args&) {
+    const auto& map = *static_cast<StrMap*>(p);
+    std::vector<std::string> values; values.reserve(map.active);
+    for (size_t i = 0; i < map.items.size(); ++i) if (map.live(i)) values.push_back(map.items[i].second);
+    return Value::object("StrList", arena.make_str_list(std::move(values)));
+  });
   return r;
 }
 } // namespace dslvm::stdlib

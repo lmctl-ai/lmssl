@@ -6,7 +6,7 @@
 # but every call below is one libcrypto concept: key -> certificate template -> extensions -> signature.
 #
 # Compile: lmscript examples/selfsigned-wildcard.lms build/selfsigned-wildcard.dslb
-# Run:     lmssl --dsl build/selfsigned-wildcard.dslb [OUTDIR]     (default OUTDIR: build/wildcard)
+# Run:     lmssl --lmcode build/selfsigned-wildcard.dslb [OUTDIR]     (default OUTDIR: build/wildcard)
 out_path = ARGV.len() > 0 ? ARGV[0] : "build/selfsigned-wildcard.dslb";
 p = _lmcode_ schema="../schema/lmssl.dsl.json";
 let dir = "build/wildcard";

@@ -32,7 +32,7 @@ the emitted bytecode starts with `DSLB\0\5`.
    `MSYSTEM=MINGW64`, `MSYS2_PATH_TYPE=inherit`, `CHERE_INVOKING=1`) after `pacman -S` of gcc, cmake, ninja, python,
    make, perl. Node (setup-node) stays a Windows tool found through the inherited PATH.
 4. **Object suffix.** mingw OpenSSL builds `*.obj`, not `*.o`; `build-openssl.sh` uses `$O`.
-5. **Text-mode stdout.** The msvcrt turned `\n` into `\r\n`, so `--dsl-schema --json` was not byte-identical. `main`
+5. **Text-mode stdout.** The msvcrt turned `\n` into `\r\n`, so `--lmcode-schema --json` was not byte-identical. `main`
    sets `_O_BINARY` on stdout/stderr (as lmhtml does).
 6. **MSYS path conversion.** bash rewrites arguments such as `/CN=x` or `/old` into `C:/msys64/...` when starting a
    native exe. The test sets `MSYS2_ARG_CONV_EXCL="*"` for exactly those two commands (setting it globally broke

@@ -2,7 +2,7 @@
 # digest, HMAC, PBKDF2, an AEAD (AES-256-GCM), and a signature.
 #
 # Compile: lmscript examples/crypto-basics.lms build/crypto-basics.dslb
-# Run:     lmssl --dsl build/crypto-basics.dslb
+# Run:     lmssl --lmcode build/crypto-basics.dslb
 out_path = ARGV.len() > 0 ? ARGV[0] : "build/crypto-basics.dslb";
 p = _lmcode_ schema="../schema/lmssl.dsl.json";
 

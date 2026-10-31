@@ -1,4 +1,4 @@
-$ lmssl --dsl build/steps.dslb localhost 39441 /hello cert.pem
+$ lmssl --lmcode build/steps.dslb localhost 39441 /hello cert.pem
 === request 1: https://localhost:39441/hello ===
 [1 dns]  localhost -> 127.0.0.1
 [2 tcp]  connected 127.0.0.1:50684 -> 127.0.0.1:39441

@@ -1,4 +1,4 @@
-$ lmssl --dsl build/serve.dslb 0 1 build/server
+$ lmssl --lmcode build/serve.dslb 0 1 build/server
 listening on https://127.0.0.1:37485
 serving 1 request:
   GET /demo HTTP/1.1 (TLSv1.3, cipher TLS_AES_256_GCM_SHA384) -> 200 OK (124 bytes)

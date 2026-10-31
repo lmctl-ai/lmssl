@@ -1,5 +1,5 @@
 # The chain is trusted but the name does not match: the handshake must fail on the host check.
-# Run: lmssl --dsl fail-hostname.dslb PORT CAFILE
+# Run: lmssl --lmcode fail-hostname.dslb PORT CAFILE
 p = _lmcode_ schema="../schema/lmssl.dsl.json";
 let conn = net.connect("127.0.0.1", str_to_int(ssl.args().at(0)));
 let ctx = ssl.client_ctx();

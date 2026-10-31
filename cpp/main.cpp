@@ -1,4 +1,4 @@
-// lmssl: the OpenSSL command line, statically linked, plus `--dsl FILE`, which runs lmscript _dsl_ bytecode
+// lmssl: the OpenSSL command line, statically linked, plus `--lmcode FILE`, which runs lmscript _dsl_ bytecode
 // against the same libcrypto/libssl.
 #include "dslvm.hpp"
 #include "host.hpp"
@@ -25,8 +25,8 @@ extern "C" int lmssl_openssl_main(int argc, char **argv);
 
 namespace {
 const char kUsage[] =
-    "usage: lmssl --version | --dsl-schema [--json] | --dsl-signatures\n"
-    "       lmssl [--json] --dsl FILE.dslb [ARG ...]   run compiled _dsl_ bytecode; ARGs reach ssl.args()\n"
+    "usage: lmssl --version | --lmcode-schema [--json] | --lmcode-signatures\n"
+    "       lmssl [--json] --lmcode FILE.dslb [ARG ...]   run compiled _dsl_ bytecode; ARGs reach ssl.args()\n"
     "       lmssl COMMAND [ARG ...]                    anything else is the OpenSSL command line (try: lmssl help)\n";
 
 void print_schema_summary(dslvm::Registry &reg) {
@@ -69,11 +69,11 @@ void ensure_config() {
 int main(int argc, char **argv) {
   const std::string first = argc > 1 ? argv[1] : "";
 #ifdef _WIN32
-  // Text mode would turn \n into \r\n: --dsl-schema --json must stay byte-identical and the result line one line.
+  // Text mode would turn \n into \r\n: --lmcode-schema --json must stay byte-identical and the result line one line.
   _setmode(_fileno(stdout), _O_BINARY);
   _setmode(_fileno(stderr), _O_BINARY);
 #endif
-  const bool ours = first == "--version" || first == "--dsl-schema" || first == "--dsl-signatures" || first == "--dsl" || first == "--json";
+  const bool ours = first == "--version" || first == "--lmcode-schema" || first == "--lmcode-signatures" || first == "--lmcode" || first == "--json";
   if (!ours) {
     ensure_config();
     return lmssl_openssl_main(argc, argv);
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
     std::cout << "lmssl " LMSSL_VERSION " (" << OpenSSL_version(OPENSSL_VERSION) << ")\n";
     return std::cout ? 0 : 4;
   }
-  if (first == "--dsl-schema") {
+  if (first == "--lmcode-schema") {
     if (argc == 2) { print_schema_summary(reg); return std::cout ? 0 : 4; }
     if (argc == 3 && std::string(argv[2]) == "--json") {
       std::cout.write(reinterpret_cast<const char *>(lmssl::embedded_schema), static_cast<std::streamsize>(lmssl::embedded_schema_size));
@@ -97,14 +97,14 @@ int main(int argc, char **argv) {
     std::cerr << kUsage;
     return 2;
   }
-  if (argc == 2 && first == "--dsl-signatures") {
+  if (argc == 2 && first == "--lmcode-signatures") {
     for (const auto &s : reg.signatures()) std::cout << s << "\n";
     return 0;
   }
 
   int at = 1;
   if (first == "--json") { host.json_mode = true; at = 2; }
-  if (argc < at + 2 || std::string(argv[at]) != "--dsl") { std::cerr << kUsage; return 2; }
+  if (argc < at + 2 || std::string(argv[at]) != "--lmcode") { std::cerr << kUsage; return 2; }
   const std::string file = argv[at + 1];
   for (int i = at + 2; i < argc; ++i) host.args.push_back(argv[i]);
 

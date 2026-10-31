@@ -1,8 +1,8 @@
 # 03 — The schema
 
-`schema/lmssl.dsl.json` (`"dsl.schema": 2`) is the contract; `lmssl --dsl-schema` prints a readable summary and
-`--dsl-schema --json` the exact bytes (embedded by CMake as a byte array, so the binary prints what the compiler hashed).
-`test.sh` diffs `lmssl --dsl-signatures` against `lmscript --dsl-signatures schema/lmssl.dsl.json` (147 entries): a
+`schema/lmssl.dsl.json` (`"dsl.schema": 2`) is the contract; `lmssl --lmcode-schema` prints a readable summary and
+`--lmcode-schema --json` the exact bytes (embedded by CMake as a byte array, so the binary prints what the compiler hashed).
+`test.sh` diffs `lmssl --lmcode-signatures` against `lmscript --lmcode-signatures schema/lmssl.dsl.json` (147 entries): a
 method added to one side and not the other fails the build.
 
 ## Context variables

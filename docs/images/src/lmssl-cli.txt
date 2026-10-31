@@ -1,7 +1,7 @@
 $ lmssl --version
 lmssl 0.1.0 (OpenSSL 4.0.3 29 Sep 2026)
 
-$ lmssl --dsl-schema
+$ lmssl --lmcode-schema
 context fs: Fs
 context net: Net
 context out: Out

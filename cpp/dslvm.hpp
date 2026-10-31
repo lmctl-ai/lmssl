@@ -1,4 +1,4 @@
-// lmcode-cpp: the C++ runtime for lmscript `_dsl_` bytecode. Header-only, C++17, standard library only.
+// lmcode-cpp: the C++ runtime for lmscript `_lmcode_` bytecode. Header-only, C++17, standard library only.
 // Single source of truth: github.com/lmctl-ai/lmcode-cpp/include/dslvm.hpp (hosts vendor it by pinned sha256, see README).
 //
 // Public API (everything else in this header is an implementation detail):
@@ -10,7 +10,7 @@
 //   dslvm::Registry                      the implementation of the schema, declared with its types: function(name, {param types}, return
 //                                        type, fn), method(type, name, {param types}, return type, fn), context(name, type); entries are
 //                                        keyed by canonical signature, distinct parameter tuples overload a name, and duplicate parameter
-//                                        tuples are refused; signatures() lists the canonical strings `lmscript --dsl-signatures SCHEMA` prints, so a
+//                                        tuples are refused; signatures() lists the canonical strings `lmscript --lmcode-signatures SCHEMA` prints, so a
 //                                        host test diffs registry and schema (a consistency check between two sources of truth,
 //                                        not a run-time defense: the VM checks nothing at call time)
 //   dslvm::Context                       the live objects of one run: set(name, pointer)
@@ -19,24 +19,34 @@
 //                                        the Program is destroyed.
 //   dslvm::Program::run(context, registry)         executes the chunk once; pass the same unchanged Registry used by load()
 //                                        (the argument remains in the public host API); throws dslvm::Error on a run-time failure
+//   dslvm::Program::entries()              the rule entries of the file (v6): {name, annotation, iface, params, returns}
+//   dslvm::Program::call(entry, context, registry, args, stats)   executes one entry with args stored into its parameter
+//                                        locals; returns the stack value at HALT (Value::none() for a void interface)
 //   dslvm::Program::RunStats             optional dispatch count for host measurements; pass a pointer to run(), never a limit
 //   dslvm::report_ok / report_error / report_app_failure   the standard one-line JSON result on stdout and the
 //                                        exit-code convention 2 compile (lmscript) / 3 host (load or run) / 4 application
 //   dslvm::VERSION                       the bytecode format version this SDK reads (and nothing else: no backward compatibility)
 //   dslvm::sha256 / hex / read_file      helpers the hosts use for the schema binding and files
 //
-// Bytecode v5 (big-endian, fixed widths, IEEE-754 binary64): magic "DSLB", u16 version 5, sha256(schema bytes);
+// Bytecode v6 (big-endian, fixed widths, IEEE-754 binary64): magic "DSLB", u16 version 6, sha256(schema bytes);
 // constants: u32 count, each u8 tag (1 = string) + u32 length + raw bytes; imports: u16 count, each u32 constant index of a canonical
 // signature (`fn NAME(T1, T2) -> R`, `method Type.name(T1) -> R`) resolved against the registry at load; context: u16 count,
 // each (u32 name constant, u32 type constant) checked against the registry's declarations; locals: u16 count, each (u32 type-name
 // constant, u8 hidden flag); u16 max_stack (the compiler's measured operand-stack depth: the VM reserves it, nothing is checked
 // against it); code: u32 length + code ending with HALT; lines: u32 count, each (u32 pc, u32 line, u16 column), may be empty.
+// Then the entries section (v6): u16 entry count; each entry is a self-contained mini-program sharing the file's constant,
+// import and context pools: u32 name constant, u32 annotation constant, u32 interface constant (canonical
+// `interface I(T1, T2) -> R` text), u16 nparams, u16 nlocals + (u32 type constant, u8 hidden) x nlocals (parameter slots
+// 0..nparams-1 are unhidden; the host stores the arguments there before execution), u16 max_stack, u32 code length + code
+// ending with HALT (a non-void entry leaves exactly one value on the stack there: the result), u32 nlines +
+// (u32 pc, u32 line, u16 column) x nlines. PCs and jumps are relative to their own region. The file ends after the last
+// entry; a file without rules has u16 0.
 // Opcodes: enum Op below (PUSH_INT carries an i64, PUSH_STR a u32 constant index, LOAD_CTX a u16 context index, CALL_FN and
 // CALL_METHOD a u16 import index + u8 argc). FOR_RANGE carries counter/end local slots and an exit displacement; FOR_NEXT carries
 // the hidden end slot and a back displacement. WHILE_BEGIN marks a paired loop head, WHILE_TEST branches to its exit on false,
 // and LOOP_BACK returns only to that paired head. Int arithmetic is 64-bit two's complement with wraparound (no overflow trap);
 // division and remainder by zero are run-time errors. The language is defined by the lmscript compiler
-// (_dsl_ blocks, npm package @lmctl-ai/lmctl); this header implements the bytecode that compiler emits.
+// (_lmcode_ blocks, npm package @lmctl-ai/lmctl); this header implements the bytecode that compiler emits.
 //
 // Guarantees of load(): wrong magic, other version (including v3), schema-hash mismatch, truncation, trailing bytes, unknown
 // constant tags, undecodable instructions, out-of-range constants/locals/imports/context indices, jumps that do not land on an
@@ -127,6 +137,7 @@ inline std::string hex(const std::string& bytes) {
 struct Value {
   enum Kind { VOID, INT, FLOAT, STR, BOOL, OBJ } kind = VOID;
   int64_t i = 0; double f = 0.0; std::string s; bool b = false; void* obj = nullptr; std::string type;  // type: schema type name of obj
+  std::string context_name;
   static Value none() { return Value(); }
   static Value integer(int64_t v) { Value x; x.kind = INT; x.i = v; return x; }
   static Value real(double v) { Value x; x.kind = FLOAT; x.f = v; return x; }
@@ -139,15 +150,40 @@ using Args = std::vector<Value>;
 using Function = std::function<Value(Args&)>;
 using Method = std::function<Value(void* self, Args&)>;
 
+struct CallSite {
+  std::string file;
+  int line = 0;
+  int column = 0;
+};
+
+struct PlanEntry {
+  int64_t seq = 0;
+  std::string kind = "host_effect";
+  std::string function;
+  Args arguments;
+  std::string arguments_json;
+  int line = 0;
+  int column = 0;
+  std::string file;
+  bool simulated = true;
+  std::string detail_json;
+  bool budget_exceeded = false;
+};
+
+struct VmConfig {
+  uint64_t step_budget = 0;  // 0 = unlimited; max mutating host-effect steps in dry mode
+};
+
 // ---- Host registry: the implementation of the schema, declared with the schema's types ----
 struct Signature { std::vector<std::string> params; std::string returns; };
-struct FunctionEntry { Signature sig; Function fn; };
-struct MethodEntry { Signature sig; Method fn; };
+struct FunctionEntry { Signature sig; Function fn; Function plan_fn; bool mutating = false; };
+struct MethodEntry { Signature sig; Method fn; Method plan_fn; bool mutating = false; };
 inline std::string signature_text(const Signature& s) { std::string out = "("; for (size_t i = 0; i < s.params.size(); ++i) out += (i ? ", " : "") + s.params[i]; return out + ") -> " + s.returns; }
 
 namespace stdlib { struct Collections; struct StdRuntime; }
 enum class StdMode { Enabled, Disabled };
 class Registry;
+class ResultSink;
 inline Registry& register_std(Registry&);
 
 class Registry {
@@ -158,6 +194,9 @@ class Registry {
   bool has_std() const { return std_initialized_; }
   stdlib::Collections& std_collections() const;
   void set_std_output(std::ostream* sink);
+  // Host-owned invocation sink; never reset by a per-region VM run.
+  void set_result_sink(ResultSink* sink);
+  std::ostream& std_output() const { return *std_output_; }
   std::vector<std::string> std_signatures() const { return std_signatures_; }
   std::vector<std::string> host_signatures() const {
     auto all = signatures(); std::vector<std::string> out;
@@ -186,21 +225,56 @@ class Registry {
     Signature sig{std::move(params), std::move(returns)};
     for (const auto& f : functions_) if (f.second.name == name && f.second.entry.sig.params == sig.params) throw Error("LOAD_UNBOUND", "registry: function '" + name + signature_text(sig) + "' is registered twice");
     std::string key = "fn " + name + signature_text(sig);
-    functions_.emplace(std::move(key), NamedFunction{name, FunctionEntry{std::move(sig), std::move(fn)}});
+    functions_.emplace(std::move(key), NamedFunction{name, FunctionEntry{std::move(sig), std::move(fn), Function{}, false}});
+    return *this;
+  }
+  Registry& mutating_function(const std::string& name, std::vector<std::string> params, std::string returns, Function plan_fn, Function apply_fn) {
+    Signature sig{std::move(params), std::move(returns)};
+    for (const auto& f : functions_) if (f.second.name == name && f.second.entry.sig.params == sig.params) throw Error("LOAD_UNBOUND", "registry: function '" + name + signature_text(sig) + "' is registered twice");
+    std::string key = "fn " + name + signature_text(sig);
+    functions_.emplace(std::move(key), NamedFunction{name, FunctionEntry{std::move(sig), std::move(apply_fn), std::move(plan_fn), true}});
     return *this;
   }
   Registry& method(const std::string& type, const std::string& name, std::vector<std::string> params, std::string returns, Method fn) {
     Signature sig{std::move(params), std::move(returns)};
     for (const auto& m : methods_) if (m.second.type == type && m.second.name == name && m.second.entry.sig.params == sig.params) throw Error("LOAD_UNBOUND", "registry: method '" + type + "." + name + signature_text(sig) + "' is registered twice");
     std::string key = "method " + type + "." + name + signature_text(sig);
-    methods_.emplace(std::move(key), NamedMethod{type, name, MethodEntry{std::move(sig), std::move(fn)}});
+    methods_.emplace(std::move(key), NamedMethod{type, name, MethodEntry{std::move(sig), std::move(fn), Method{}, false}});
+    return *this;
+  }
+  Registry& mutating_method(const std::string& type, const std::string& name, std::vector<std::string> params, std::string returns, Method plan_fn, Method apply_fn) {
+    Signature sig{std::move(params), std::move(returns)};
+    for (const auto& m : methods_) if (m.second.type == type && m.second.name == name && m.second.entry.sig.params == sig.params) throw Error("LOAD_UNBOUND", "registry: method '" + type + "." + name + signature_text(sig) + "' is registered twice");
+    std::string key = "method " + type + "." + name + signature_text(sig);
+    methods_.emplace(std::move(key), NamedMethod{type, name, MethodEntry{std::move(sig), std::move(apply_fn), std::move(plan_fn), true}});
     return *this;
   }
   Registry& context(const std::string& name, const std::string& type) {
     if (!context_.emplace(name, type).second) throw Error("LOAD_UNBOUND", "registry: context '" + name + "' is declared twice");
     return *this;
   }
-  // Canonical strings, sorted: exactly what `lmscript --dsl-signatures SCHEMA` prints for the schema this registry implements.
+  std::string context_name_for_type(const std::string& type) const {
+    for (const auto& c : context_) if (c.second == type) return c.first;
+    return "";
+  }
+  void record_plan_detail(std::string detail_json, bool budget_exceeded = false) const {
+    has_pending_plan_detail_ = true;
+    pending_plan_detail_ = std::move(detail_json);
+    pending_budget_exceeded_ = budget_exceeded;
+  }
+  void clear_pending_plan_detail() const {
+    has_pending_plan_detail_ = false;
+    pending_plan_detail_.clear();
+    pending_budget_exceeded_ = false;
+  }
+  bool has_pending_plan_detail() const { return has_pending_plan_detail_; }
+  std::string take_pending_plan_detail(bool& budget_exceeded) const {
+    budget_exceeded = pending_budget_exceeded_;
+    has_pending_plan_detail_ = false;
+    pending_budget_exceeded_ = false;
+    return std::move(pending_plan_detail_);
+  }
+  // Canonical strings, sorted: exactly what `lmscript --lmcode-signatures SCHEMA` prints for the schema this registry implements.
   std::vector<std::string> signatures() const {
     std::vector<std::string> out;
     for (auto& c : context_) out.push_back("context " + c.first + ": " + c.second);
@@ -229,6 +303,10 @@ class Registry {
   void begin_std_run() const;
   void end_std_run() const noexcept;
   bool std_initialized_ = false;
+  std::ostream* std_output_ = &std::cout;
+  mutable bool has_pending_plan_detail_ = false;
+  mutable std::string pending_plan_detail_;
+  mutable bool pending_budget_exceeded_ = false;
   std::vector<std::string> std_signatures_;
   std::shared_ptr<stdlib::StdRuntime> std_runtime_;
   std::map<std::string, NamedFunction> functions_;
@@ -240,6 +318,31 @@ inline std::string json_escape(const std::string& s) {
   std::string out = "\"";
   for (unsigned char c : s) { switch (c) { case '"': out += "\\\""; break; case '\\': out += "\\\\"; break; case '\n': out += "\\n"; break; case '\r': out += "\\r"; break; case '\t': out += "\\t"; break; default: if (c < 0x20) { char b[8]; std::snprintf(b, sizeof b, "\\u%04x", c); out += b; } else out += char(c); } }
   return out + "\"";
+}
+inline std::string value_to_json(const Value& v) {
+  switch (v.kind) {
+    case Value::VOID: return "null";
+    case Value::INT: return std::to_string(v.i);
+    case Value::FLOAT: {
+      if (!std::isfinite(v.f)) return "null";
+      char buf[64];
+      std::snprintf(buf, sizeof buf, "%.15g", v.f);
+      return buf;
+    }
+    case Value::STR: return json_escape(v.s);
+    case Value::BOOL: return v.b ? "true" : "false";
+    case Value::OBJ: return json_escape(v.type);
+  }
+  return "null";
+}
+inline std::string args_to_json(const Args& args) {
+  std::string out = "[";
+  for (size_t i = 0; i < args.size(); ++i) {
+    if (i) out.push_back(',');
+    out += value_to_json(args[i]);
+  }
+  out.push_back(']');
+  return out;
 }
 // ---- The standard result line: exactly one JSON line on stdout; the return value is the process exit code. ----
 // `result_json` must already be JSON text ("null", "42", json_escape(text), an object...).
@@ -258,8 +361,32 @@ class Context {
  public:
   void set(const std::string& name, void* object) { objects_[name] = object; }
   void* get(const std::string& name) const { auto it = objects_.find(name); return it == objects_.end() ? nullptr : it->second; }
+  void set_dry(bool dry) { dry_ = dry; }
+  bool dry() const { return dry_; }
+  void set_file(std::string file) { file_ = std::move(file); call_site_.file = file_; }
+  const std::string& file() const { return file_; }
+  void set_config(const VmConfig& cfg) { config_ = cfg; }
+  const VmConfig& config() const { return config_; }
+  void set_step_budget(uint64_t budget) { config_.step_budget = budget; }
+  uint64_t step_budget() const { return config_.step_budget; }
+  void set_dry_loop_limit(int64_t limit) { config_.step_budget = limit > 0 ? static_cast<uint64_t>(limit) : 0; }
+  int64_t dry_loop_limit() const { return static_cast<int64_t>(config_.step_budget); }
+  const std::vector<PlanEntry>& plan_entries() const { return plan_entries_; }
+  std::vector<PlanEntry>& plan_entries() { return plan_entries_; }
+  void clear_plan_entries() { plan_entries_.clear(); truncated_ = false; stop_reason_.clear(); }
+  bool truncated() const { return truncated_; }
+  const std::string& stop_reason() const { return stop_reason_; }
+  const CallSite& call_site() const { return call_site_; }
  private:
+  friend class Program;
   std::map<std::string, void*> objects_;
+  bool dry_ = false;
+  std::string file_;
+  VmConfig config_;
+  mutable std::vector<PlanEntry> plan_entries_;
+  mutable bool truncated_ = false;
+  mutable std::string stop_reason_;
+  mutable CallSite call_site_;
 };
 
 // ---- Bytecode ----
@@ -288,7 +415,7 @@ enum MathFn : uint8_t {
   MATH_ABS_I = 14, MATH_MIN_I = 15, MATH_MAX_I = 16, MATH_CLAMP_I = 17
 };
 static const char MAGIC[4] = {'D', 'S', 'L', 'B'};
-static const uint16_t VERSION = 5;
+static const uint16_t VERSION = 6;
 // Convert the wire representation explicitly so decoding does not depend on whether a C++ implementation
 // defines an out-of-range unsigned-to-signed conversion as a two's-complement reinterpretation.
 inline int64_t from_twos_complement(uint64_t u) {
@@ -320,6 +447,9 @@ class Program {
   struct RunStats { uint64_t instructions = 0; };
   struct Loop { uint16_t counter, end; size_t opener_next; };
   struct VerifiedInstr { size_t pc, next, target = 0; uint8_t op; size_t depth; size_t owner; };
+  // One rule of the file: name is the fn identifier, annotation the node kind, iface the canonical
+  // `interface I(T1, T2) -> R` text; params are the type names of parameter slots 0..n-1, returns the interface's.
+  struct Entry { std::string name, annotation, iface, returns; std::vector<std::string> params; };
 
   // Parses, binds and verifies. Nothing executes here. Throws dslvm::Error with a message naming the problem.
   static Program load(const std::string& bytecode, const std::string& schemaBytes, const Registry& reg) {
@@ -343,8 +473,11 @@ class Program {
     for (uint16_t i = 0; i < nimports; ++i) {
       const std::string& canonical = cidx(r.u32(), "import");
       Import imp;
-      if (canonical.compare(0, 3, "fn ") == 0) imp.fn = reg.function_by_signature(canonical);
-      else if (canonical.compare(0, 7, "method ") == 0) {
+      if (canonical.compare(0, 3, "fn ") == 0) {
+        imp.fn = reg.function_by_signature(canonical);
+        size_t par = canonical.find('(');
+        if (par != std::string::npos && par > 3) imp.name = canonical.substr(3, par - 3);
+      } else if (canonical.compare(0, 7, "method ") == 0) {
         imp.method = reg.method_by_signature(canonical);
         size_t dot = canonical.find('.'), par = canonical.find('(');
         if (dot != std::string::npos && par != std::string::npos && dot < par) { imp.type = canonical.substr(7, dot - 7); imp.name = canonical.substr(dot + 1, par - dot - 1); }
@@ -370,17 +503,101 @@ class Program {
     p.code_ = r.bytes(codeLen);
     uint32_t nlines = r.u32();
     for (uint32_t i = 0; i < nlines; ++i) { Line l; l.pc = r.u32(); l.line = r.u32(); l.column = r.u16(); if (i && l.pc < p.lines_[i - 1].pc) throw Error("LOAD_BAD_BYTECODE", "line table is not sorted by pc at entry " + std::to_string(i)); p.lines_.push_back(l); }
-    if (!r.done()) throw Error("LOAD_BAD_BYTECODE", "bytecode has " + std::to_string(bytecode.size() - r.pos()) + " trailing byte(s) after the line table");
-    p.verify();
+    uint16_t nentries = r.u16();
+    for (uint16_t i = 0; i < nentries; ++i) {
+      EntryRegion e;
+      e.meta.name = cidx(r.u32(), "entry name");
+      for (const auto& prev : p.entry_meta_) if (prev.name == e.meta.name) throw Error("LOAD_BAD_BYTECODE", "duplicate entry name '" + e.meta.name + "'");
+      e.meta.annotation = cidx(r.u32(), "entry annotation");
+      e.meta.iface = cidx(r.u32(), "entry interface");
+      // The interface text is canonical `interface I(T1, T2) -> R`; type names never contain commas or parens.
+      size_t lpar = e.meta.iface.find('(');
+      size_t rpar = lpar == std::string::npos ? std::string::npos : e.meta.iface.find(')', lpar + 1);
+      size_t arrow = e.meta.iface.rfind("->");
+      std::vector<std::string> iparams;
+      std::string ret;
+      if (lpar != std::string::npos && rpar != std::string::npos && arrow != std::string::npos && arrow > rpar) {
+        std::string inner = e.meta.iface.substr(lpar + 1, rpar - lpar - 1);
+        for (size_t b = 0, e2; b <= inner.size(); b = e2 + 1) {
+          e2 = inner.find(',', b);
+          std::string part = inner.substr(b, e2 == std::string::npos ? e2 : e2 - b);
+          size_t fb = part.find_first_not_of(' '), lb = part.find_last_not_of(' ');
+          if (fb != std::string::npos) iparams.push_back(part.substr(fb, lb - fb + 1));
+          if (e2 == std::string::npos) break;
+        }
+        ret = e.meta.iface.substr(arrow + 2);
+        size_t fb = ret.find_first_not_of(' '), lb = ret.find_last_not_of(' ');
+        ret = fb == std::string::npos ? "" : ret.substr(fb, lb - fb + 1);
+      }
+      if (ret.empty()) throw Error("LOAD_BAD_BYTECODE", "entry '" + e.meta.name + "': interface '" + e.meta.iface + "' is not an interface signature");
+      e.meta.returns = ret;
+      e.nparams = r.u16();
+      uint16_t enlocals = r.u16();
+      if (e.nparams > enlocals) throw Error("LOAD_BAD_BYTECODE", "entry '" + e.meta.name + "': nparams " + std::to_string(e.nparams) + " exceeds nlocals " + std::to_string(enlocals));
+      for (uint16_t j = 0; j < enlocals; ++j) {
+        Local l; l.type = cidx(r.u32(), "entry local type");
+        uint8_t hidden = r.u8();
+        if (hidden > 1) throw Error("LOAD_BAD_BYTECODE", "entry '" + e.meta.name + "': local " + std::to_string(j) + " hidden flag must be 0 or 1");
+        l.hidden = hidden == 1;
+        if (j < e.nparams) e.meta.params.push_back(l.type);
+        e.locals.push_back(std::move(l));
+      }
+      if (e.nparams != iparams.size()) throw Error("LOAD_BAD_BYTECODE", "entry '" + e.meta.name + "' declares " + std::to_string(e.nparams) + " parameter(s); " + e.meta.iface + " has " + std::to_string(iparams.size()));
+      for (uint16_t j = 0; j < e.nparams; ++j) {
+        if (e.locals[j].type != iparams[j]) throw Error("LOAD_BAD_BYTECODE", "entry '" + e.meta.name + "' parameter " + std::to_string(j + 1) + " has type " + e.locals[j].type + "; the interface expects " + iparams[j]);
+        if (e.locals[j].hidden) throw Error("LOAD_BAD_BYTECODE", "entry '" + e.meta.name + "' parameter " + std::to_string(j + 1) + " is hidden");
+      }
+      e.max_stack = r.u16();
+      uint32_t ecode_len = r.u32();
+      e.code = r.bytes(ecode_len);
+      uint32_t enlines = r.u32();
+      for (uint32_t j = 0; j < enlines; ++j) { Line l; l.pc = r.u32(); l.line = r.u32(); l.column = r.u16(); if (j && l.pc < e.lines[j - 1].pc) throw Error("LOAD_BAD_BYTECODE", "entry '" + e.meta.name + "': line table is not sorted by pc at entry " + std::to_string(j)); e.lines.push_back(l); }
+      p.entry_meta_.push_back(e.meta);
+      p.entries_.push_back(std::move(e));
+    }
+    if (!r.done()) throw Error("LOAD_BAD_BYTECODE", "bytecode has " + std::to_string(bytecode.size() - r.pos()) + " trailing byte(s) after the entries");
+    p.verify_region(p.code_, p.locals_, p.lines_, p.loops_, -1);
+    for (auto& e : p.entries_) {
+      try {
+        p.verify_region(e.code, e.locals, e.lines, e.loops, e.meta.returns == "void" ? 0 : 1);
+      } catch (Error& err) {
+        throw Error(err.code, "entry '" + e.meta.name + "': " + err.message);
+      }
+    }
     return p;
   }
 
   // Executes the chunk once. The host's objects come from ctx (declared names only).
   void run(const Context& ctx, const Registry& reg, RunStats* stats = nullptr) const {
+    if (ctx.dry() && ctx.truncated_) return;
+    execute(code_, lines_, loops_, max_stack_, std::vector<Value>(locals_.size()), false, ctx, reg, stats);
+  }
+
+  // The rule entries, in source order.
+  const std::vector<Entry>& entries() const { return entry_meta_; }
+
+  // Executes one entry: args are stored into its parameter locals 0..n-1 (kinds are the host's contract, unchecked),
+  // the result is the value left on the stack at HALT (Value::none() for a void interface). A wrong argument count or
+  // an out-of-range entry index is a host programming error (RUN_HOST).
+  Value call(size_t entry, const Context& ctx, const Registry& reg, std::vector<Value> args, RunStats* stats = nullptr) const {
+    if (entry >= entries_.size()) throw Error("RUN_HOST", "call entry index " + std::to_string(entry) + " out of range (" + std::to_string(entries_.size()) + " entries)");
+    const EntryRegion& e = entries_[entry];
+    if (args.size() != e.nparams) throw Error("RUN_HOST", "call entry '" + e.meta.name + "' expects " + std::to_string(e.nparams) + " argument(s); found " + std::to_string(args.size()));
+    if (ctx.dry() && ctx.truncated_) return Value::none();
+    std::vector<Value> locals(e.locals.size());
+    for (size_t i = 0; i < args.size(); ++i) locals[i] = std::move(args[i]);
+    return execute(e.code, e.lines, e.loops, e.max_stack, std::move(locals), e.meta.returns != "void", ctx, reg, stats);
+  }
+
+ private:
+  // The one interpreter: run() and call() differ only in the region, the initial locals and whether HALT's stack
+  // value is the result. Dry mode, RunStats, the std run scope and located errors behave the same for both.
+  Value execute(const std::string& code, const std::vector<Line>& lines, const std::map<size_t, Loop>& loops, uint16_t max_stack,
+                std::vector<Value> locals, bool capture_result, const Context& ctx, const Registry& reg, RunStats* stats) const {
     auto std_scope = (bound_registry_ ? *bound_registry_ : reg).std_run_scope();
-    std::vector<Value> stack, locals(locals_.size());
-    stack.reserve(max_stack_);
-    Reader r(code_);
+    std::vector<Value> stack;
+    stack.reserve(max_stack);
+    Reader r(code);
     auto pop = [&]() { if (stack.empty()) throw Error("RUN_ERROR", "stack underflow"); Value v = std::move(stack.back()); stack.pop_back(); return v; };
     auto push = [&](Value v) { stack.push_back(std::move(v)); };
     auto jump = [&](int32_t rel) { int64_t target = int64_t(r.pos()) + rel; if (target < 0) throw Error("RUN_ERROR", "jump before the code start"); r.seek(size_t(target)); };
@@ -407,6 +624,38 @@ class Program {
       if (x <= -TWO63) return INT64_MIN;
       return static_cast<int64_t>(x);
     };
+    auto update_call_site = [&](size_t pc) {
+      const Line* ln = line_of(lines, pc);
+      ctx.call_site_.file = ctx.file_;
+      ctx.call_site_.line = ln ? static_cast<int>(ln->line) : 0;
+      ctx.call_site_.column = ln ? static_cast<int>(ln->column) : 0;
+    };
+    auto record_plan_entry = [&](const std::string& fn_label, const Args& args, const Value& result) {
+      PlanEntry entry;
+      entry.seq = static_cast<int64_t>(ctx.plan_entries_.size() + 1);
+      entry.kind = "host_effect";
+      entry.function = fn_label;
+      entry.arguments = args;
+      entry.arguments_json = args_to_json(args);
+      entry.line = ctx.call_site_.line;
+      entry.column = ctx.call_site_.column;
+      entry.file = ctx.file_;
+      entry.simulated = true;
+      if (reg.has_pending_plan_detail()) {
+        entry.detail_json = reg.take_pending_plan_detail(entry.budget_exceeded);
+      } else if (result.kind == Value::OBJ) {
+        if (const auto* jm = reg.method_by_signature("method " + result.type + ".json() -> string")) {
+          Args empty;
+          Value jv = jm->fn(result.obj, empty);
+          if (jv.kind == Value::STR) entry.detail_json = std::move(jv.s);
+        }
+        if (entry.detail_json.find("\"budget_exceeded\":true") != std::string::npos ||
+            entry.detail_json.find("\"budget_exceeded\": true") != std::string::npos) {
+          entry.budget_exceeded = true;
+        }
+      }
+      ctx.plan_entries_.push_back(std::move(entry));
+    };
     while (true) {
       const size_t fault_pc = r.pos();
       try {
@@ -427,13 +676,29 @@ class Program {
           const std::string& name = context_[r.u16()];
           void* obj = ctx.get(name);
           if (!obj) throw Error("RUN_ERROR", "context variable '" + name + "' was not provided by the host for this run");
-          push(Value::object(*reg.context_type(name), obj)); break;
+          Value v = Value::object(*reg.context_type(name), obj);
+          v.context_name = name;
+          push(std::move(v)); break;
         }
         case CALL_FN: {
           const Import& imp = imports_[r.u16()]; uint8_t argc = r.u8();
           Args args(argc); for (int i = argc - 1; i >= 0; --i) args[i] = pop();
-          Value result = imp.fn->fn(args);
-          if (result.kind != Value::VOID) push(std::move(result));
+          update_call_site(fault_pc);
+          if (imp.fn->mutating && ctx.dry()) {
+            if (ctx.config_.step_budget > 0 && ctx.plan_entries_.size() >= ctx.config_.step_budget) {
+              ctx.truncated_ = true;
+              ctx.stop_reason_ = "dry loop limit";
+              return Value::none();
+            }
+            reg.clear_pending_plan_detail();
+            const Function& target_fn = imp.fn->plan_fn ? imp.fn->plan_fn : imp.fn->fn;
+            Value result = target_fn(args);
+            record_plan_entry(imp.name, args, result);
+            if (result.kind != Value::VOID) push(std::move(result));
+          } else {
+            Value result = imp.fn->fn(args);
+            if (result.kind != Value::VOID) push(std::move(result));
+          }
           break;
         }
         case CALL_METHOD: {
@@ -441,8 +706,23 @@ class Program {
           Args args(argc); for (int i = argc - 1; i >= 0; --i) args[i] = pop();
           Value self = pop();
           if (self.kind != Value::OBJ || self.type != imp.type) throw Error("RUN_ERROR", "method " + imp.type + "." + imp.name + " called on a " + (self.kind == Value::OBJ ? self.type : std::string(self.kind_name())));
-          Value result = imp.method->fn(self.obj, args);
-          if (result.kind != Value::VOID) push(std::move(result));
+          update_call_site(fault_pc);
+          if (imp.method->mutating && ctx.dry()) {
+            if (ctx.config_.step_budget > 0 && ctx.plan_entries_.size() >= ctx.config_.step_budget) {
+              ctx.truncated_ = true;
+              ctx.stop_reason_ = "dry loop limit";
+              return Value::none();
+            }
+            reg.clear_pending_plan_detail();
+            const Method& target_fn = imp.method->plan_fn ? imp.method->plan_fn : imp.method->fn;
+            Value result = target_fn(self.obj, args);
+            std::string receiver = !self.context_name.empty() ? self.context_name : reg.context_name_for_type(imp.type);
+            record_plan_entry((receiver.empty() ? imp.type : receiver) + "." + imp.name, args, result);
+            if (result.kind != Value::VOID) push(std::move(result));
+          } else {
+            Value result = imp.method->fn(self.obj, args);
+            if (result.kind != Value::VOID) push(std::move(result));
+          }
           break;
         }
         case EQ: case NE: {
@@ -488,6 +768,7 @@ class Program {
         case I2S: { Value a = pop(); if (a.kind != Value::INT) throw Error("RUN_ERROR", std::string("str(int) applied to ") + a.kind_name()); push(Value::string(std::to_string(a.i))); break; }
         case F2S: {  // %.15g: deterministic across hosts
           Value a = pop(); if (a.kind != Value::FLOAT) throw Error("RUN_ERROR", std::string("str(float) applied to ") + a.kind_name());
+          if (std::isnan(a.f)) { push(Value::string("nan")); break; } // NaN sign/payload are not portable text.
           char buf[64]; std::snprintf(buf, sizeof buf, "%.15g", a.f); push(Value::string(buf)); break;
         }
         case B2S: { Value a = pop(); if (a.kind != Value::BOOL) throw Error("RUN_ERROR", std::string("str(bool) applied to ") + a.kind_name()); push(Value::string(a.b ? "true" : "false")); break; }
@@ -540,7 +821,7 @@ class Program {
         }
         case FOR_NEXT: {
           uint16_t encoded_end = r.u16(); int32_t rel = r.i32();
-          const auto it = loops_.find(r.pos() - 7);
+          const auto it = loops.find(r.pos() - 7);
           // The verifier has paired this instruction and recorded both hidden slots;
           // the encoded slot is retained as a structural consistency marker.
           const Loop& loop = it->second;
@@ -561,17 +842,20 @@ class Program {
           push(stack.back()); break;
         }
         case POP: pop(); break;
-        case HALT: return;
+        case HALT:
+          if (capture_result && !stack.empty()) { Value result = std::move(stack.back()); return result; }
+          return Value::none();
         default: throw Error("RUN_ERROR", "unknown opcode " + std::to_string(op));
         }
       } catch (Error& e) {
-        const Line* line = line_of(fault_pc);
+        const Line* line = line_of(lines, fault_pc);
         if (line) e.locate(line->line, line->column);
         throw;
       }
     }
   }
 
+ public:
   size_t constant_count() const { return consts_.size(); }
   size_t code_size() const { return code_.size(); }
   size_t import_count() const { return imports_.size(); }
@@ -580,24 +864,28 @@ class Program {
   uint16_t max_stack() const { return max_stack_; }
   const std::vector<Line>& lines() const { return lines_; }
   // The source position recorded for a pc (the last line-table entry at or before it); null when the table has none.
-  const Line* line_of(size_t pc) const { const Line* best = nullptr; for (auto& l : lines_) { if (l.pc <= pc) best = &l; else break; } return best; }
+  const Line* line_of(size_t pc) const { return line_of(lines_, pc); }
+  static const Line* line_of(const std::vector<Line>& lines, size_t pc) { const Line* best = nullptr; for (auto& l : lines) { if (l.pc <= pc) best = &l; else break; } return best; }
 
  private:
-  // Static verification: every instruction decodes, every index is in range, ordinary jumps remain in their lexical
-  // region (or break exactly one loop), and paired range/while loops nest properly. Imports and context are already bound.
-  void verify() {
+  // Static verification of one code region (the body or an entry): every instruction decodes, every index is in range,
+  // ordinary jumps remain in their lexical region (or break exactly one loop), and paired range/while loops nest properly.
+  // Imports and context are already bound. halt_depth >= 0 additionally requires every reachable HALT to leave exactly
+  // that many values (entries: 0 for a void interface, 1 otherwise) and disables the no-loop early return in verify_stack.
+  void verify_region(const std::string& code, const std::vector<Local>& locals, const std::vector<Line>& lines,
+                     std::map<size_t, Loop>& loops, int halt_depth) {
     struct Open { uint8_t op; size_t pc, next, exit; uint16_t counter, end; bool tested; size_t parent; size_t test = 0; };
     struct LoopRegion { size_t exit, parent, test; uint8_t op; uint16_t counter, end; };
     std::vector<VerifiedInstr> insns; std::vector<Open> open; std::vector<std::pair<size_t, int64_t>> ordinary;
     std::vector<std::pair<size_t, int64_t>> while_exits;
     std::map<size_t, LoopRegion> regions;
     std::vector<uint16_t> used_loop_slots;
-    loops_.clear();
-    Reader r(code_);
+    loops.clear();
+    Reader r(code);
     auto index = [&](size_t i, size_t n, const char* what) { if (i >= n) throw Error("LOAD_BAD_BYTECODE", std::string(what) + " index " + std::to_string(i) + " out of range (" + std::to_string(n) + " entries)"); };
     auto local_int_hidden = [&](uint16_t slot, const char* role) {
-      index(slot, locals_.size(), role);
-      if (locals_[slot].type != "int" || !locals_[slot].hidden) throw Error("LOAD_BAD_BYTECODE", std::string(role) + " slot " + std::to_string(slot) + " must be a hidden int local");
+      index(slot, locals.size(), role);
+      if (locals[slot].type != "int" || !locals[slot].hidden) throw Error("LOAD_BAD_BYTECODE", std::string(role) + " slot " + std::to_string(slot) + " must be a hidden int local");
     };
     bool halted = false;
     while (!r.done()) {
@@ -616,7 +904,7 @@ class Program {
           if (v > 1) throw Error("LOAD_BAD_BYTECODE", "PUSH_BOOL operand must be 0 or 1");
           break;
         }
-        case LOAD_LOCAL: case STORE_LOCAL: index(r.u16(), locals_.size(), "local slot"); break;
+        case LOAD_LOCAL: case STORE_LOCAL: index(r.u16(), locals.size(), "local slot"); break;
         case LOAD_CTX: index(r.u16(), context_.size(), "context"); break;
         case CALL_FN: {
           uint16_t i = r.u16(); uint8_t argc = r.u8(); index(i, imports_.size(), "import");
@@ -663,7 +951,7 @@ class Program {
           if (encoded_end != loop.end) throw Error("LOAD_BAD_BYTECODE", "FOR_NEXT at offset " + std::to_string(pc) + " names end slot " + std::to_string(encoded_end) + ", expected " + std::to_string(loop.end));
           if (int64_t(r.pos()) + rel != int64_t(loop.next)) throw Error("LOAD_BAD_BYTECODE", "FOR_NEXT at offset " + std::to_string(pc) + " must return to its FOR_RANGE body");
           if (loop.exit != r.pos()) throw Error("LOAD_BAD_BYTECODE", "FOR_RANGE at offset " + std::to_string(loop.pc) + " must exit immediately after its FOR_NEXT");
-          loops_[pc] = Loop{loop.counter, loop.end, loop.next};
+          loops[pc] = Loop{loop.counter, loop.end, loop.next};
           insns.back().target = size_t(int64_t(r.pos()) + rel);
           regions[loop.pc] = LoopRegion{loop.exit, loop.parent, 0, FOR_RANGE, loop.counter, loop.end};
           break;
@@ -709,15 +997,16 @@ class Program {
         throw Error("LOAD_BAD_BYTECODE", "jump at offset " + std::to_string(j.first) + " crosses a loop boundary (only a break to the innermost loop exit is allowed)");
     }
     for (auto& i : insns) if (i.op == STORE_LOCAL) {
-      Reader q(code_); q.seek(i.pc + 1); uint16_t slot = q.u16();
-      for (auto& l : loops_) if (slot == l.second.counter || slot == l.second.end)
+      Reader q(code); q.seek(i.pc + 1); uint16_t slot = q.u16();
+      for (auto& l : loops) if (slot == l.second.counter || slot == l.second.end)
         throw Error("LOAD_BAD_BYTECODE", "STORE_LOCAL at offset " + std::to_string(i.pc) + " writes a read-only range slot " + std::to_string(slot));
+      if (locals[slot].hidden) throw Error("LOAD_BAD_BYTECODE", "STORE_LOCAL at offset " + std::to_string(i.pc) + " writes compiler-owned loop local " + std::to_string(slot));
     }
     for (auto& i : insns) if (i.op == FOR_RANGE) {
-      uint16_t counter = uint16_t(uint8_t(code_[i.pc + 1]) << 8 | uint8_t(code_[i.pc + 2]));
+      uint16_t counter = uint16_t(uint8_t(code[i.pc + 1]) << 8 | uint8_t(code[i.pc + 2]));
       (void)counter;
       // Re-read the encoded exit displacement; its target must be a parent-region instruction.
-      Reader q(code_); q.seek(i.pc + 1); q.u16(); q.u16(); int32_t rel = q.i32();
+      Reader q(code); q.seek(i.pc + 1); q.u16(); q.u16(); int32_t rel = q.i32();
       const VerifiedInstr* to = find_insn(int64_t(q.pos()) + rel);
       if (!to || to->owner != i.owner) throw Error("LOAD_BAD_BYTECODE", "FOR_RANGE at offset " + std::to_string(i.pc) + " exits to an invalid loop region");
     }
@@ -728,12 +1017,12 @@ class Program {
       if (loop == regions.end() || loop->second.op != WHILE_BEGIN || loop->second.exit != size_t(j.second) || to->owner != loop->second.parent)
         throw Error("LOAD_BAD_BYTECODE", "WHILE_TEST at offset " + std::to_string(j.first) + " exits to an invalid loop region");
     }
-    verify_stack(insns);
-    for (auto& l : lines_) if (l.pc >= code_.size()) throw Error("LOAD_BAD_BYTECODE", "line table entry points at pc " + std::to_string(l.pc) + ", beyond the code");
+    verify_stack(insns, code, halt_depth);
+    for (auto& l : lines) if (l.pc >= code.size()) throw Error("LOAD_BAD_BYTECODE", "line table entry points at pc " + std::to_string(l.pc) + ", beyond the code");
   }
 
-  void verify_stack(const std::vector<VerifiedInstr>& insns) const {
-    if (std::none_of(insns.begin(), insns.end(), [](const VerifiedInstr& i) { return i.op == FOR_RANGE || i.op == WHILE_BEGIN; })) return;
+  void verify_stack(const std::vector<VerifiedInstr>& insns, const std::string& code, int halt_depth) const {
+    if (halt_depth < 0 && std::none_of(insns.begin(), insns.end(), [](const VerifiedInstr& i) { return i.op == FOR_RANGE || i.op == WHILE_BEGIN; })) return;
     std::map<size_t, size_t> at;
     for (size_t i = 0; i < insns.size(); ++i) at[insns[i].pc] = i;
     std::vector<int64_t> incoming(insns.size(), -1);
@@ -759,7 +1048,7 @@ class Program {
     while (!work.empty()) {
       const size_t ix = work.back(); work.pop_back();
       const VerifiedInstr& in = insns[ix];
-      Reader r(code_); r.seek(in.pc); const uint8_t op = r.u8();
+      Reader r(code); r.seek(in.pc); const uint8_t op = r.u8();
       int pop = 0, push = 0;
       bool fallthrough = true, branch = false, conditional = false;
       switch (op) {
@@ -802,8 +1091,25 @@ class Program {
           incoming[ix] != incoming[at.at(in.owner)] + 1)
         throw Error("LOAD_BAD_BYTECODE", "WHILE_TEST must leave the loop-head stack depth at offset " + std::to_string(in.pc));
     }
+    if (halt_depth >= 0) {
+      for (size_t ix = 0; ix < insns.size(); ++ix) {
+        if (insns[ix].op == HALT && incoming[ix] >= 0 && incoming[ix] != halt_depth)
+          throw Error("LOAD_BAD_BYTECODE", "HALT leaves " + std::to_string(incoming[ix]) + " values");
+      }
+    }
   }
   const Registry* bound_registry_ = nullptr; // Same lifetime as the bound import entries.
+  struct EntryRegion {  // an entry's private code region; meta is the public Entry view
+    Entry meta;
+    uint16_t nparams = 0;
+    std::vector<Local> locals;
+    uint16_t max_stack = 0;
+    std::string code;
+    std::vector<Line> lines;
+    std::map<size_t, Loop> loops;
+  };
+  std::vector<EntryRegion> entries_;
+  std::vector<Entry> entry_meta_;
   std::vector<std::string> consts_; std::vector<Import> imports_; std::vector<std::string> context_; std::vector<Local> locals_; uint16_t max_stack_ = 0; std::string code_; std::vector<Line> lines_; std::map<size_t, Loop> loops_;
 };
 

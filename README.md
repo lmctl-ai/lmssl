@@ -8,14 +8,14 @@ replacement for `curl`.
 ```sh
 lmssl version                                   # it is openssl: every command, option and exit code is OpenSSL 4.0.3's
 lmssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout key.pem -out cert.pem -subj /CN=demo
-lmssl --dsl build/https-steps.dslb google.com   # run compiled DSL bytecode against the same libraries
+lmssl --lmcode build/https-steps.dslb google.com   # run compiled DSL bytecode against the same libraries
 ```
 
 - **One file, no dependencies.** Linux (glibc static), macOS and Windows binaries are on the
   [releases page](https://github.com/lmctl-ai/lmssl/releases). `ldd lmssl` says "not a dynamic executable".
   OpenSSL's stock `openssl.cnf` is embedded, so `req`, `ca` and friends work on a machine with no OpenSSL installed.
-- **Two modes in one binary.** Anything that is not `--dsl`, `--json`, `--version`, `--dsl-schema` or `--dsl-signatures`
-  is handed to OpenSSL's own `main` (compiled from the unmodified `apps/openssl.c`, with `main` renamed). `--dsl FILE`
+- **Two modes in one binary.** Anything that is not `--lmcode`, `--json`, `--version`, `--lmcode-schema` or `--lmcode-signatures`
+  is handed to OpenSSL's own `main` (compiled from the unmodified `apps/openssl.c`, with `main` renamed). `--lmcode FILE`
   loads bytecode, checks it against the schema embedded in the binary, and runs it.
 - **Examples that explain.** [`examples/`](examples/) has self-signed wildcard certificates, a small CA, an HTTPS
   request split into DNS / TCP / TLS / PKI / HTTP steps (with the handshake messages printed), and a local HTTPS server.
@@ -30,14 +30,14 @@ lmssl --dsl build/https-steps.dslb google.com   # run compiled DSL bytecode agai
 | **HTTPS handshake steps** | **Local HTTPS server** | **lmssl CLI & Schema** |
 | --- | --- | --- |
 | <img src="docs/images/https-steps.png" width="290" alt="https-steps"> | <img src="docs/images/serve-https.png" width="290" alt="serve-https"> | <img src="docs/images/lmssl-cli.png" width="290" alt="lmssl-cli"> |
-| DNS, TCP, TLS handshake messages, cipher negotiation, and HTTP response.<br>`lmctl https://raw.githubusercontent.com/lmctl-ai/lmssl/main/examples/https-steps.lms` | Local test HTTPS server with auto-generated certificate serving TLS 1.3.<br>`lmctl https://raw.githubusercontent.com/lmctl-ai/lmssl/main/examples/serve-https.lms` | Embedded OpenSSL 4.0.3 CLI and strongly typed DSL schema signatures.<br>`lmssl --version && lmssl --dsl-schema` |
+| DNS, TCP, TLS handshake messages, cipher negotiation, and HTTP response.<br>`lmctl https://raw.githubusercontent.com/lmctl-ai/lmssl/main/examples/https-steps.lms` | Local test HTTPS server with auto-generated certificate serving TLS 1.3.<br>`lmctl https://raw.githubusercontent.com/lmctl-ai/lmssl/main/examples/serve-https.lms` | Embedded OpenSSL 4.0.3 CLI and strongly typed DSL schema signatures.<br>`lmssl --version && lmssl --lmcode-schema` |
 
 ## Quick start
 
 ```sh
 npm install -g @lmctl-ai/lmctl        # provides the lmscript compiler (DSL bytecode v5)
 lmscript examples/selfsigned-wildcard.lms build/wildcard.dslb
-lmssl --dsl build/wildcard.dslb build/wildcard
+lmssl --lmcode build/wildcard.dslb build/wildcard
 lmssl x509 -in build/wildcard/cert.pem -noout -text | head -30     # inspect the result with the CLI half
 ```
 
@@ -45,7 +45,7 @@ lmssl x509 -in build/wildcard/cert.pem -noout -text | head -30     # inspect the
 
 ```sh
 lmscript examples/https-steps.lms build/https-steps.dslb
-lmssl --dsl build/https-steps.dslb google.com          # follows google.com -> www.google.com
+lmssl --lmcode build/https-steps.dslb google.com          # follows google.com -> www.google.com
 ```
 
 It prints, per request, the DNS answers, the TCP endpoints, the negotiated TLS version / cipher / key-exchange group
@@ -70,7 +70,7 @@ end _lmcode_
 savedsl(p, "cert.dslb");
 ```
 
-`lmssl --dsl-schema` prints the whole surface (147 signatures); the types are:
+`lmssl --lmcode-schema` prints the whole surface (147 signatures); the types are:
 
 | Context | What it is |
 | --- | --- |

@@ -6,7 +6,7 @@
 
 1. **The OpenSSL command line.** `lmssl x509 ...`, `lmssl s_client ...`, `lmssl req ...` behave like `openssl`: the
    code is OpenSSL's own `apps/` directory, unmodified, compiled and linked in.
-2. **A DSL host.** `lmssl --dsl FILE.dslb [ARGS]` loads lmscript `_dsl_` bytecode, verifies it against the embedded
+2. **A DSL host.** `lmssl --lmcode FILE.dslb [ARGS]` loads lmscript `_dsl_` bytecode, verifies it against the embedded
    schema (`schema/lmssl.dsl.json`) and runs it against libcrypto/libssl through a small typed object API.
 
 The aim is **understanding**, not convenience. Every step that `openssl req -x509` or `curl https://...` hides is one
@@ -17,7 +17,7 @@ decoding, no connection reuse, no proxies.
 ## Dispatch (cpp/main.cpp)
 
 ```
-argv[1] in {--version, --dsl-schema, --dsl-signatures, --dsl, --json}  -> lmssl's own handling
+argv[1] in {--version, --lmcode-schema, --lmcode-signatures, --lmcode, --json}  -> lmssl's own handling
 anything else (including none)                                         -> lmssl_openssl_main(argc, argv)
 ```
 

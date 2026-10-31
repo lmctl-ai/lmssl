@@ -1,5 +1,5 @@
 # Mutual TLS in one process family: this script is the CLIENT. The server is serve-mtls.lms.
-# Run: lmssl --dsl mtls.dslb PORT DIR       (DIR holds ca.pem, client.pem, client.key written by serve-mtls)
+# Run: lmssl --lmcode mtls.dslb PORT DIR       (DIR holds ca.pem, client.pem, client.key written by serve-mtls)
 p = _lmcode_ schema="../schema/lmssl.dsl.json";
 let args = ssl.args();
 let dir = args.at(1);

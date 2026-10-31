@@ -7,7 +7,7 @@
 # It is meant for understanding what happens, not for replacing curl: no cookies, no chunked decoding, no retries.
 #
 # Compile: lmscript examples/https-steps.lms build/https-steps.dslb
-# Run:     lmssl --dsl build/https-steps.dslb [HOST=www.google.com] [PORT=443] [PATH=/] [CAFILE]
+# Run:     lmssl --lmcode build/https-steps.dslb [HOST=www.google.com] [PORT=443] [PATH=/] [CAFILE]
 #   Without CAFILE the operating system's trust store is used (system_roots).
 #   Try:  HOST=google.com    -> a redirect to www.google.com to follow
 #         HOST=expired.badssl.com or self-signed.badssl.com  -> see the verification failure explained

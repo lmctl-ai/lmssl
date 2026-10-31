@@ -1,6 +1,6 @@
 # Examples
 
-Each `.lms` file is a normal lmscript file whose `_dsl_` block is compiled to bytecode and run by `lmssl --dsl`.
+Each `.lms` file is a normal lmscript file whose `_dsl_` block is compiled to bytecode and run by `lmssl --lmcode`.
 The header comment of each file shows the equivalent `openssl` command line and the compile/run commands.
 
 - `selfsigned-wildcard.lms` Generate a key and a self-signed wildcard certificate (`*.example.test`), print what ends up in it, and check which host names it covers. Equivalent of `openssl req -x509 -addext subjectAltName=...`.
@@ -13,8 +13,8 @@ Offline walk-through of the last two, in two terminals:
 
 ```sh
 lmscript examples/serve-https.lms build/serve.dslb && lmscript examples/https-steps.lms build/steps.dslb
-lmssl --dsl build/serve.dslb 0 2 build/server              # prints the port, serves 2 requests
-lmssl --dsl build/steps.dslb localhost "$(cat build/server/port)" /old build/server/cert.pem
+lmssl --lmcode build/serve.dslb 0 2 build/server              # prints the port, serves 2 requests
+lmssl --lmcode build/steps.dslb localhost "$(cat build/server/port)" /old build/server/cert.pem
 ```
 
 `./test.sh` compiles and runs all of them and cross-checks the output with the `openssl` half of the same binary

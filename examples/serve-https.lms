@@ -4,7 +4,7 @@
 #   anything  -> 200 with a text/plain description of the TLS session it just negotiated
 #
 # Compile: lmscript examples/serve-https.lms build/serve-https.dslb
-# Run:     lmssl --dsl build/serve-https.dslb [PORT=0] [REQUESTS=1] [DIR=build/server]
+# Run:     lmssl --lmcode build/serve-https.dslb [PORT=0] [REQUESTS=1] [DIR=build/server]
 #   PORT 0 lets the OS choose; the chosen port is printed and written to DIR/port. The certificate is DIR/cert.pem:
 #   hand it to the client as its trust anchor (see https-steps.lms).
 out_path = ARGV.len() > 0 ? ARGV[0] : "build/serve-https.dslb";

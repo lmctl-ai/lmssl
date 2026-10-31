@@ -4,7 +4,7 @@
 # The script keeps the roles apart on purpose: the "server" only ever hands its CSR to the "CA".
 #
 # Compile: lmscript examples/ca-and-leaf.lms build/ca-and-leaf.dslb
-# Run:     lmssl --dsl build/ca-and-leaf.dslb [OUTDIR]        (default OUTDIR: build/pki)
+# Run:     lmssl --lmcode build/ca-and-leaf.dslb [OUTDIR]        (default OUTDIR: build/pki)
 out_path = ARGV.len() > 0 ? ARGV[0] : "build/ca-and-leaf.dslb";
 p = _lmcode_ schema="../schema/lmssl.dsl.json";
 let dir = "build/pki";

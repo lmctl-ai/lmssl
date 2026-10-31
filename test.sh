@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build lmssl and run every check. Needs: cmake, a C/C++ toolchain, perl, make, and lmscript (@lmctl-ai/lmctl, DSL v5).
+# Build lmssl and run every check. Needs: cmake, a C/C++ toolchain, perl, make, and lmscript (@lmctl-ai/lmctl, lmcode v6).
 # The network example (https-steps against a public site) is skipped unless LMSSL_NETWORK=1.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -42,21 +42,22 @@ if [ "$UNAME_S" = Linux ] && command -v ldd >/dev/null; then
   ok "fully static (ldd)"
 fi
 
+python3 tests/check-host-flags.py schema/lmssl.dsl.json "$HOST" || fail "hard host flag cutover"
 # ---- version and schema protocol
 "$HOST" --version | grep -q '^lmssl [0-9]' || fail "--version"
 ok "--version"
-"$HOST" --dsl-schema --json > "$WORK/schema.json"
+"$HOST" --lmcode-schema --json > "$WORK/schema.json"
 cmp -s "$WORK/schema.json" schema/lmssl.dsl.json || fail "embedded schema differs from schema/lmssl.dsl.json"
-ok "--dsl-schema --json is byte-identical to the schema file"
-"$HOST" --dsl-signatures | tr -d '\r' > "$WORK/host.sig"
-"$LMSCRIPT" --dsl-signatures schema/lmssl.dsl.json | tr -d '\r' > "$WORK/schema.sig"
+ok "--lmcode-schema --json is byte-identical to the schema file"
+"$HOST" --lmcode-signatures | tr -d '\r' > "$WORK/host.sig"
+"$LMSCRIPT" --lmcode-signatures schema/lmssl.dsl.json | tr -d '\r' > "$WORK/schema.sig"
 diff "$WORK/host.sig" "$WORK/schema.sig" > /dev/null || { diff "$WORK/host.sig" "$WORK/schema.sig" | head; fail "registry and schema signatures differ"; }
 ok "host registry signatures equal the compiler's view of the schema ($(wc -l < "$WORK/host.sig" | tr -d ' ') entries)"
 python3 scripts/merge-std.py --normalize-signatures schema/lmssl.host.json "$WORK/host-only.sig"
 diff "$WORK/host.sig" "$WORK/host-only.sig" >/dev/null || fail "host-only schema drift after std normalization"
 ok "host-only schema self-check accepts built-in std"
-"$LMSCRIPT" --dsl-signatures schema/lmssl.host.json --without-std > "$WORK/host-only-compiler.sig"
-"$LMSCRIPT" --dsl-signatures cpp/std/lmcode-std.schema.json > "$WORK/std.sig"
+"$LMSCRIPT" --lmcode-signatures schema/lmssl.host.json --without-std > "$WORK/host-only-compiler.sig"
+"$LMSCRIPT" --lmcode-signatures cpp/std/lmcode-std.schema.json > "$WORK/std.sig"
 python3 - "$WORK/host.sig" "$WORK/std.sig" "$WORK/host-only-registry.sig" <<'PYCOMPARE'
 import pathlib,sys
 full,std,out=map(pathlib.Path,sys.argv[1:])
@@ -78,7 +79,7 @@ ok "OpenSSL commands work (version, dgst, req -x509, x509)"
 
 # ---- DSL helpers
 compile() { "$LMSCRIPT" "$1" "$2" > "$WORK/compile.log" 2>&1 || { cat "$WORK/compile.log"; fail "compile $1"; }; }
-run() { "$HOST" --dsl "$@"; }
+run() { "$HOST" --lmcode "$@"; }
 expect_exit() { # want-code description cmd...
   local want="$1" what="$2"; shift 2
   set +e; "$@" > "$WORK/out.txt" 2> "$WORK/err.txt"; local rc=$?; set -e
@@ -144,7 +145,7 @@ SERVERS+=($!)
 for _ in $(seq 1 100); do [ -s "$WORK/server/port" ] && break; sleep 0.1; done
 PORT="$(cat "$WORK/server/port")"
 [ -n "$PORT" ] || fail "server did not start: $(cat "$WORK/serve.log")"
-MSYS2_ARG_CONV_EXCL="*" $TIMEOUT_CMD 60 "$HOST" --dsl "$WORK/steps.dslb" localhost "$PORT" /old "$WORK/server/cert.pem" > "$WORK/steps.txt" || { cat "$WORK/steps.txt" "$WORK/serve.log"; fail "https-steps against the local server"; }
+MSYS2_ARG_CONV_EXCL="*" $TIMEOUT_CMD 60 "$HOST" --lmcode "$WORK/steps.dslb" localhost "$PORT" /old "$WORK/server/cert.pem" > "$WORK/steps.txt" || { cat "$WORK/steps.txt" "$WORK/serve.log"; fail "https-steps against the local server"; }
 grep -q 'HTTP/1.1 302 Found' "$WORK/steps.txt" && grep -q 'request 2: https://localhost:'"$PORT"'/new' "$WORK/steps.txt" \
   && grep -q 'HTTP/1.1 200 OK' "$WORK/steps.txt" && grep -q 'verification: ok' "$WORK/steps.txt" \
   && grep -q 'ClientHello' "$WORK/steps.txt" && grep -q 'sni:      localhost' "$WORK/steps.txt" || { cat "$WORK/steps.txt"; fail "https-steps output"; }
@@ -169,20 +170,20 @@ rm -rf "$WORK/mtls"
 run "$WORK/smtls.dslb" 0 "$WORK/mtls" > "$WORK/smtls.log" 2>&1 &
 SERVERS+=($!)
 for _ in $(seq 1 100); do [ -s "$WORK/mtls/port" ] && break; sleep 0.1; done
-$TIMEOUT_CMD 30 "$HOST" --dsl "$WORK/mtls.dslb" "$(cat "$WORK/mtls/port")" "$WORK/mtls" > "$WORK/mtls.txt" || { cat "$WORK/mtls.txt" "$WORK/smtls.log"; fail "mutual TLS"; }
+$TIMEOUT_CMD 30 "$HOST" --lmcode "$WORK/mtls.dslb" "$(cat "$WORK/mtls/port")" "$WORK/mtls" > "$WORK/mtls.txt" || { cat "$WORK/mtls.txt" "$WORK/smtls.log"; fail "mutual TLS"; }
 grep -q 'server says: hello CN=alice,O=clients' "$WORK/mtls.txt" || { cat "$WORK/mtls.txt"; fail "mutual TLS identity"; }
 ok "mutual TLS (server requires and reads the client certificate)"
 
 # ---- failure paths and exit codes
 compile tests/fail-app.lms "$WORK/fapp.dslb"
-expect_exit 4 "out.fail" "$HOST" --dsl "$WORK/fapp.dslb"
+expect_exit 4 "out.fail" "$HOST" --lmcode "$WORK/fapp.dslb"
 grep -q 'deliberate application failure' "$WORK/err.txt" || fail "app failure message"
-expect_exit 4 "out.fail --json" "$HOST" --json --dsl "$WORK/fapp.dslb"
+expect_exit 4 "out.fail --json" "$HOST" --json --lmcode "$WORK/fapp.dslb"
 grep -q '"phase": "app"' "$WORK/out.txt" && [ "$(wc -l < "$WORK/out.txt" | tr -d ' ')" = 1 ] || { cat "$WORK/out.txt"; fail "--json prints exactly one result line"; }
 ok "out.fail exits 4; --json keeps stdout to one result line"
 
 compile tests/fail-aead.lms "$WORK/faead.dslb"
-expect_exit 3 "tampered AEAD" "$HOST" --dsl "$WORK/faead.dslb"
+expect_exit 3 "tampered AEAD" "$HOST" --lmcode "$WORK/faead.dslb"
 grep -q 'authentication failed' "$WORK/err.txt" || fail "AEAD message"
 ok "tampered AEAD message is rejected (exit 3)"
 
@@ -191,7 +192,7 @@ run "$WORK/serve.dslb" 0 1 "$WORK/server3" > "$WORK/serve3.log" 2>&1 &
 SERVERS+=($!)
 for _ in $(seq 1 100); do [ -s "$WORK/server3/port" ] && break; sleep 0.1; done
 compile tests/fail-trust.lms "$WORK/ftrust.dslb"
-expect_exit 3 "untrusted server" "$HOST" --dsl "$WORK/ftrust.dslb" "$(cat "$WORK/server3/port")"
+expect_exit 3 "untrusted server" "$HOST" --lmcode "$WORK/ftrust.dslb" "$(cat "$WORK/server3/port")"
 grep -q 'certificate verify' "$WORK/err.txt" || { cat "$WORK/err.txt"; fail "trust failure message"; }
 ok "client without trust anchors refuses a self-signed server (exit 3)"
 
@@ -200,14 +201,14 @@ run "$WORK/serve.dslb" 0 1 "$WORK/server4" > "$WORK/serve4.log" 2>&1 &
 SERVERS+=($!)
 for _ in $(seq 1 100); do [ -s "$WORK/server4/port" ] && break; sleep 0.1; done
 compile tests/fail-hostname.lms "$WORK/fhost.dslb"
-expect_exit 3 "wrong host name" "$HOST" --dsl "$WORK/fhost.dslb" "$(cat "$WORK/server4/port")" "$WORK/server4/cert.pem"
+expect_exit 3 "wrong host name" "$HOST" --lmcode "$WORK/fhost.dslb" "$(cat "$WORK/server4/port")" "$WORK/server4/cert.pem"
 grep -q 'hostname mismatch\|certificate verify' "$WORK/err.txt" || { cat "$WORK/err.txt"; fail "hostname failure message"; }
 ok "trusted chain with the wrong host name is refused (exit 3)"
 
 # ---- loader refusals happen before anything runs
 printf 'DSLB' > "$WORK/trunc.dslb"
-expect_exit 3 "truncated bytecode" "$HOST" --dsl "$WORK/trunc.dslb"
-expect_exit 3 "missing bytecode" "$HOST" --dsl "$WORK/does-not-exist.dslb"
+expect_exit 3 "truncated bytecode" "$HOST" --lmcode "$WORK/trunc.dslb"
+expect_exit 3 "missing bytecode" "$HOST" --lmcode "$WORK/does-not-exist.dslb"
 cat > "$WORK/other.schema.json" <<'EOF'
 {"dsl.schema": 2, "name": "other", "types": {"T": {"methods": {"go": [{"params": [], "returns": "void"}]}}}, "functions": {}, "context": {"t": "T"}}
 EOF
@@ -218,12 +219,12 @@ end _dsl_
 savedsl(p, "$WORK/other.dslb");
 EOF
 "$LMSCRIPT" "$WORK/other.lms" > /dev/null 2>&1 || fail "compile other schema"
-expect_exit 3 "foreign schema" "$HOST" --dsl "$WORK/other.dslb"
+expect_exit 3 "foreign schema" "$HOST" --lmcode "$WORK/other.dslb"
 grep -qi 'schema' "$WORK/err.txt" || { cat "$WORK/err.txt"; fail "schema mismatch message"; }
 ok "truncated, missing and foreign-schema bytecode are refused (exit 3)"
 
 if [ "${LMSSL_NETWORK:-0}" = 1 ]; then
-  $TIMEOUT_CMD 90 "$HOST" --dsl "$WORK/steps.dslb" google.com > "$WORK/net.txt" || { cat "$WORK/net.txt"; fail "https-steps google.com"; }
+  $TIMEOUT_CMD 90 "$HOST" --lmcode "$WORK/steps.dslb" google.com > "$WORK/net.txt" || { cat "$WORK/net.txt"; fail "https-steps google.com"; }
   grep -q 'verification: ok' "$WORK/net.txt" && grep -q 'HTTP/1.1 [23]' "$WORK/net.txt" || { cat "$WORK/net.txt"; fail "google.com output"; }
   ok "network: https-steps google.com (system trust store, redirect)"
 fi

@@ -1,5 +1,5 @@
 # Server side of mutual TLS: builds a CA, a server cert and a client cert, then requires the client certificate.
-# Run: lmssl --dsl serve-mtls.dslb PORT DIR      (PORT 0 = any free port; the chosen port is written to DIR/port)
+# Run: lmssl --lmcode serve-mtls.dslb PORT DIR      (PORT 0 = any free port; the chosen port is written to DIR/port)
 p = _lmcode_ schema="../schema/lmssl.dsl.json";
 let args = ssl.args();
 let dir = args.at(1);

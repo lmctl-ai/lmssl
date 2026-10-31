@@ -1,5 +1,5 @@
 $ lmscript examples/ca-and-leaf.lms build/ca-leaf.dslb
-$ lmssl --dsl build/ca-leaf.dslb
+$ lmssl --lmcode build/ca-leaf.dslb
 CA        O=lmssl demo,CN=lmssl demo root CA  is_ca=true  self_signed=true
 CSR       O=lmssl demo,CN=app.example.test  signature_ok=true
 LEAF      O=lmssl demo,CN=app.example.test

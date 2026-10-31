@@ -1,5 +1,5 @@
 $ lmscript examples/selfsigned-wildcard.lms build/selfsigned.dslb
-$ lmssl --dsl build/selfsigned.dslb
+$ lmssl --lmcode build/selfsigned.dslb
 1. key:         EC on curve prime256v1, 256 bits
    fingerprint: 33a156ffbf10b838ccd57f73a19130c5d39f60a0b8c4e40018d37dc43e5a8595   (sha256 of the public key)
 2. subject:     O=lmssl demo,CN=*.example.test
