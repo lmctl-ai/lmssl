@@ -65,16 +65,20 @@ first.unlink(); second.unlink()
 app=source('app','out.fail("application control");')
 r=run_sources([a,app,b],capture=work/'app-capture')
 assert r.returncode==4 and json.loads(r.stdout)['phase']=='app' and json.loads(r.stdout)['part']==1 and first.exists() and not second.exists(),r
-# Dry does not bind a socket: the same real invocation fails on an occupied port.
+# Dry does not bind a socket: the same real invocation fails on an occupied port. The occupied-port refusal is a Linux
+# socket property: macOS and Windows let a second listener share a loopback port (SO_REUSEADDR semantics), so the real
+# run would succeed there and the control would say nothing about dry mode. Run it where it is meaningful.
 import socket
-with socket.socket() as listener:
- listener.bind(('127.0.0.1',0)); listener.listen()
- src=source('listen',f'let l = net.listen({listener.getsockname()[1]});')
- r=run_sources([src],capture=work/'listen-capture',capture_only=True)
- assert r.returncode==0,r
- file=str(work/'listen-capture'/'0.lmcode')
- r=hostrun(['--dry-run','--lmcode',file])
- assert r.returncode==0 and frame(r)['dry'] is True,r
- r=hostrun(['--lmcode',file])
- assert r.returncode==3 and frame(r)['phase']=='run',r
+import sys
+for _ in ([0] if sys.platform.startswith('linux') else []):
+ with socket.socket() as listener:
+  listener.bind(('127.0.0.1',0)); listener.listen()
+  src=source('listen',f'let l = net.listen({listener.getsockname()[1]});')
+  r=run_sources([src],capture=work/'listen-capture',capture_only=True)
+  assert r.returncode==0,r
+  file=str(work/'listen-capture'/'0.lmcode')
+  r=hostrun(['--dry-run','--lmcode',file])
+  assert r.returncode==0 and frame(r)['dry'] is True,r
+  r=hostrun(['--lmcode',file])
+  assert r.returncode==3 and frame(r)['phase']=='run',r
 print('PASS per-part arguments and UTF-8 source/data, application exit 4 and dry socket negative control')
