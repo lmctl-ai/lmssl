@@ -1,10 +1,8 @@
 # The building blocks under TLS, with published test vectors you can check by eye:
 # digest, HMAC, PBKDF2, an AEAD (AES-256-GCM), and a signature.
 #
-# Compile: lmscript examples/crypto-basics.lms build/crypto-basics.dslb
-# Run:     lmssl --lmcode build/crypto-basics.dslb
-out_path = ARGV.len() > 0 ? ARGV[0] : "build/crypto-basics.dslb";
-p = _lmcode_ schema="../schema/lmssl.dsl.json";
+# Run: lmscript examples/crypto-basics.lms [script arguments]
+p = _lmcode_ cli="lmssl";
 
 fn check(name: string, got: string, want: string) -> void {
   if (got != want) { out.fail(name + " mismatch: got " + got + ", want " + want); }
@@ -46,4 +44,5 @@ let esig = ec.sign("SHA256", "release v1.0");
 out.line("ecdsa      verifies=" + str(ec.verify("SHA256", "release v1.0", esig)) + " tampered=" + str(ec.verify("SHA256", "release v9", esig)));
 if (!ed.verify("", "release v1.0", sig) || ed.verify("", "release v1.1", sig)) { out.fail("signature check is wrong"); }
 end _lmcode_
-savedsl(p, out_path);
+r = run_lmcode(p, {args: ARGV});
+require(r.ok, json_stringify(r));

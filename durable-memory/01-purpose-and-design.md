@@ -6,7 +6,7 @@
 
 1. **The OpenSSL command line.** `lmssl x509 ...`, `lmssl s_client ...`, `lmssl req ...` behave like `openssl`: the
    code is OpenSSL's own `apps/` directory, unmodified, compiled and linked in.
-2. **A DSL host.** `lmssl --lmcode FILE.dslb [ARGS]` loads lmscript `_dsl_` bytecode, verifies it against the embedded
+2. **A DSL host.** `lmssl --lmcode FILE.lmcode [ARGS]` loads lmscript `_lmcode_` bytecode, verifies it against the embedded
    schema (`schema/lmssl.dsl.json`) and runs it against libcrypto/libssl through a small typed object API.
 
 The aim is **understanding**, not convenience. Every step that `openssl req -x509` or `curl https://...` hides is one
@@ -40,16 +40,17 @@ Following the SDK rules (bytecode is trusted; the host owns policy):
   `Key.save` writes mode 0600 and `Fs.write_private` does the same for arbitrary data.
 - Failures are exceptions: any `std::exception` thrown by a method becomes `dslvm::Error("Type.method: message")` with
   the OpenSSL error queue appended (`fail()` in `host.cpp`). A script cannot catch it; the run ends with exit 3.
-  `Out.fail(msg)` throws code `APP_FAIL` and ends with exit 4 (phase `app` in `--json` mode).
+  `Out.fail(msg)` throws code `APP_FAIL` and ends with exit 4 (phase `app` in the result frame).
 - The DSL has no collections, so lists are host objects (`StrList.len/at/add/join`), the same pattern lmhtml uses, and
   `for (x in list)` works on any object with `len()` and `at(i)`.
 
 ## Output protocol
 
-Human mode (default): `Out.line/text` go to stdout; errors go to stderr as `lmssl: ...`; exit 0/3/4.
-`--json` mode: stdout carries exactly one line `{"ok": true, "result": null}` or `{"ok": false, "phase": ..., "code": ...,
-"message": ..., "line": N, "column": C}` as in the SDK's result-line standard, and `Out.line/text` write to stderr so the
-single-line rule holds. Compile failures are lmscript's (exit 2).
+All lmcode invocations emit one terminal SDK frame. Out.line/text always use
+stderr, as do diagnostic errors. --json is accepted for compatibility. Native
+OpenSSL CLI output is unchanged. Dry mode loads all programs but executes none.
+Repeated --lmcode FILE [ARGS] groups select multiple parts and keep ssl.args()
+separate for each. Metadata controls builder order and dry mode.
 
 ## Why Apache-2.0
 

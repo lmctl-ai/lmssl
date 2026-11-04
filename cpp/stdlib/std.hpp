@@ -11,6 +11,7 @@
 #include "json.hpp"
 #include "encoding.hpp"
 #include "result.hpp"
+#include "invocation.hpp"
 #undef DSLVM_STD_BUILDING
 
 namespace dslvm {
@@ -23,6 +24,7 @@ struct StdRuntime {
 } // namespace stdlib
 
 inline Registry::Registry(StdMode mode) {
+  std_runtime_ = std::make_shared<stdlib::StdRuntime>();
   if (mode == StdMode::Enabled) register_std(*this);
 }
 
@@ -52,8 +54,29 @@ inline stdlib::Collections& Registry::std_collections() const {
   if (!has_std()) throw Error("std: registry has standard library disabled");
   return std_runtime_->collections;
 }
+inline stdlib::Collections& Registry::dry_collections() const {
+  if (!std_runtime_) throw Error("std: collection arena unavailable");
+  return std_runtime_->collections;
+}
+inline Value dry_dummy(const Registry& registry, const std::string& declared) {
+  if (declared == "void") return Value::none();
+  if (declared == "null") return Value::dry_null(declared);
+  if (declared == "bool") return Value::boolean(true);
+  if (declared == "int" || declared == "integer" || declared == "int64") return Value::integer(0);
+  if (declared == "float" || declared == "double" || declared == "number") return Value::real(0.0);
+  if (declared == "string") return Value::string("");
+  auto& arena = registry.dry_collections();
+  if (declared == "StrList") return Value::object(declared, arena.make_str_list());
+  if (declared == "IntList") return Value::object(declared, arena.make_int_list());
+  if (declared == "FloatList") return Value::object(declared, arena.make_float_list());
+  if (declared == "StrMap") return Value::object(declared, arena.make_str_map());
+  if (declared == "IntMap") return Value::object(declared, arena.make_object<stdlib::IntMap>("IntMap"));
+  if (declared == "FloatMap") return Value::object(declared, arena.make_object<stdlib::FloatMap>("FloatMap"));
+  return Value::dry_null(declared);
+}
 inline void Registry::set_result_sink(ResultSink* sink) {
   if (!has_std()) throw Error("std: registry has standard library disabled");
+  if(sink && sink->sealed()) throw Error("lmcode return: result sink is sealed");
   std_runtime_->result_sink = sink;
 }
 inline void Registry::set_std_output(std::ostream* sink) {
@@ -66,6 +89,7 @@ inline void Registry::set_std_output(std::ostream* sink) {
         output->write(args[0].s.data(), static_cast<std::streamsize>(args[0].s.size()));
         output->put('\n'); return Value::none();
       };
+      if (it->second.entry.dry_fn) it->second.entry.dry_fn = it->second.entry.fn;
     }
   }
 }

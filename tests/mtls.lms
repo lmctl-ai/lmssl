@@ -1,6 +1,6 @@
 # Mutual TLS in one process family: this script is the CLIENT. The server is serve-mtls.lms.
-# Run: lmssl --lmcode mtls.dslb PORT DIR       (DIR holds ca.pem, client.pem, client.key written by serve-mtls)
-p = _lmcode_ schema="../schema/lmssl.dsl.json";
+# Run: lmscript tests/mtls.lms [script arguments]
+p = _lmcode_ cli="lmssl";
 let args = ssl.args();
 let dir = args.at(1);
 let conn = net.connect("localhost", str_to_int(args.at(0)));
@@ -12,4 +12,5 @@ tls.write("who am i\n");
 out.line("server says: " + str_trim(tls.read_until("\n", 1000)));
 tls.shutdown();
 end _lmcode_
-savedsl(p, ARGV[0]);
+r = run_lmcode(p, {args: ARGV});
+require(r.ok, json_stringify(r));

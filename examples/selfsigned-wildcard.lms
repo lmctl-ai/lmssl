@@ -5,10 +5,8 @@
 #     -subj "/O=lmssl demo/CN=*.example.test" -addext "subjectAltName=DNS:*.example.test,DNS:example.test"
 # but every call below is one libcrypto concept: key -> certificate template -> extensions -> signature.
 #
-# Compile: lmscript examples/selfsigned-wildcard.lms build/selfsigned-wildcard.dslb
-# Run:     lmssl --lmcode build/selfsigned-wildcard.dslb [OUTDIR]     (default OUTDIR: build/wildcard)
-out_path = ARGV.len() > 0 ? ARGV[0] : "build/selfsigned-wildcard.dslb";
-p = _lmcode_ schema="../schema/lmssl.dsl.json";
+# Run: lmscript examples/selfsigned-wildcard.lms [script arguments]
+p = _lmcode_ cli="lmssl";
 let dir = "build/wildcard";
 if (ssl.args().len() > 0) { dir = ssl.args().at(0); }
 fs.mkdir(dir);
@@ -50,4 +48,5 @@ for (h in hosts) {
 if (!cert.self_signed()) { out.fail("certificate should verify against its own key"); }
 out.line("4. self-signed: signature verifies with the certificate's own public key");
 end _lmcode_
-savedsl(p, out_path);
+r = run_lmcode(p, {args: ARGV});
+require(r.ok, json_stringify(r));

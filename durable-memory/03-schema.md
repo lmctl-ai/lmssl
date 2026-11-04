@@ -73,4 +73,4 @@ The built-in standard excludes testing helpers. The host schema explicitly decla
 
 The pinned standard also supplies `file_read`, `file_write`, `file_append`, `file_exists`, and `file_lines` on raw bytes and native process-cwd paths. `file_lines` splits LF while retaining CR and trailing empty fields. SDK synchronization now pins nine artifacts, including `stdlib/file.hpp`.
 
-Compiler minimum 0.2.420 resolves std implicitly; embedded bytes are host-only, and tests compare full and `--without-std` registry surfaces while optional testing remains host-declared.
+Compiler minimum 0.2.460 resolves std implicitly; embedded bytes are host-only, and tests compare full and `--without-std` registry surfaces while optional testing remains host-declared.

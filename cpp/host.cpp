@@ -713,8 +713,8 @@ void register_host(dslvm::Registry &reg, Host &host) {
   };
 
   // ---------------------------------------------------------------- Out
-  g.method<Host>("Out", "line", {"string"}, "void", [](Host &h, Args &a) { (h.json_mode ? std::cerr : std::cout) << a[0].s << "\n"; return none(); });
-  g.method<Host>("Out", "text", {"string"}, "void", [](Host &h, Args &a) { (h.json_mode ? std::cerr : std::cout) << a[0].s; return none(); });
+  g.method<Host>("Out", "line", {"string"}, "void", [](Host &, Args &a) { std::cerr << a[0].s << "\n"; return none(); });
+  g.method<Host>("Out", "text", {"string"}, "void", [](Host &, Args &a) { std::cerr << a[0].s; return none(); });
   g.method<Host>("Out", "warn", {"string"}, "void", [](Host &, Args &a) { std::cerr << a[0].s << "\n"; return none(); });
   g.method<Host>("Out", "fail", {"string"}, "void", [](Host &, Args &a) -> Value { throw dslvm::Error("APP_FAIL", a[0].s); });
 

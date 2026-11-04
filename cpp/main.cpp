@@ -1,4 +1,4 @@
-// lmssl: the OpenSSL command line, statically linked, plus `--lmcode FILE`, which runs lmscript _dsl_ bytecode
+// lmssl: the OpenSSL command line, statically linked, plus `--lmcode FILE`, which runs lmscript _lmcode_ bytecode
 // against the same libcrypto/libssl.
 #include "dslvm.hpp"
 #include "host.hpp"
@@ -12,6 +12,7 @@
 #include <fstream>
 #include <random>
 #include <iostream>
+#include <optional>
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
@@ -26,7 +27,7 @@ extern "C" int lmssl_openssl_main(int argc, char **argv);
 namespace {
 const char kUsage[] =
     "usage: lmssl --version | --lmcode-schema [--json] | --lmcode-signatures\n"
-    "       lmssl [--json] --lmcode FILE.dslb [ARG ...]   run compiled _dsl_ bytecode; ARGs reach ssl.args()\n"
+    "       lmssl [--json] [--dry-run] --lmcode FILE [ARG ...] [--lmcode FILE ...]   run compiled _lmcode_ bytecode; ARGs reach ssl.args()\n"
     "       lmssl COMMAND [ARG ...]                    anything else is the OpenSSL command line (try: lmssl help)\n";
 
 void print_schema_summary(dslvm::Registry &reg) {
@@ -73,7 +74,7 @@ int main(int argc, char **argv) {
   _setmode(_fileno(stdout), _O_BINARY);
   _setmode(_fileno(stderr), _O_BINARY);
 #endif
-  const bool ours = first == "--version" || first == "--lmcode-schema" || first == "--lmcode-signatures" || first == "--lmcode" || first == "--json";
+  const bool ours = first == "--version" || first == "--lmcode-schema" || first == "--lmcode-signatures" || first == "--lmcode" || first == "--json" || first == "--dry-run";
   if (!ours) {
     ensure_config();
     return lmssl_openssl_main(argc, argv);
@@ -102,38 +103,63 @@ int main(int argc, char **argv) {
     return 0;
   }
 
+  auto usage_error = [&]() {
+    std::cerr << kUsage;
+    return dslvm::failure_frame("cli", dslvm::Error("CLI_USAGE", "invalid lmcode arguments"));
+  };
   int at = 1;
-  if (first == "--json") { host.json_mode = true; at = 2; }
-  if (argc < at + 2 || std::string(argv[at]) != "--lmcode") { std::cerr << kUsage; return 2; }
-  const std::string file = argv[at + 1];
-  for (int i = at + 2; i < argc; ++i) host.args.push_back(argv[i]);
-
+  bool dry = false;
+  bool json = false; // Compatibility flag; all lmcode results now use frames.
+  while (at < argc && (std::string(argv[at]) == "--json" || std::string(argv[at]) == "--dry-run")) {
+    if (std::string(argv[at]) == "--json") { if (json) return usage_error(); json = true; }
+    else { if (dry) return usage_error(); dry = true; }
+    ++at;
+  }
+  std::vector<std::string> files;
+  std::vector<std::vector<std::string>> arguments;
+  // Repeat --lmcode FILE to add a part; other words retain their ssl.args() meaning.
+  while (at < argc) {
+    if (std::string(argv[at++]) != "--lmcode" || at >= argc) return usage_error();
+    std::string file = argv[at++];
+    if (file.empty() || file.rfind("--", 0) == 0) return usage_error();
+    files.push_back(file);
+    arguments.emplace_back();
+    while (at < argc && std::string(argv[at]) != "--lmcode") arguments.back().push_back(argv[at++]);
+  }
+  if (files.empty()) return usage_error();
+  std::optional<dslvm::InvocationResults> holder;
+  try {
+    if (dry && !std::getenv("LMCODE_INVOCATION_FILE")) holder.emplace(dslvm::InvocationResults::from_command(files, true));
+    else holder.emplace(dslvm::InvocationResults::from_command(files));
+  } catch (const dslvm::Error &e) { return dslvm::failure_frame("cli", e); }
+  auto &results = *holder;
+  if (dry && !results.dry()) return dslvm::failure_frame("cli", dslvm::Error("CLI_USAGE", "--dry-run contradicts real-mode metadata"));
   const std::string schema(reinterpret_cast<const char *>(lmssl::embedded_schema), lmssl::embedded_schema_size);
   dslvm::Context context;
   context.set("ssl", &host);
   context.set("out", &host);
   context.set("fs", &host);
   context.set("net", &host);
-
-  auto report = [&](const char *phase, const dslvm::Error &e) {
-    if (host.json_mode) return dslvm::report_error(e.code == "APP_FAIL" ? "app" : phase, e);
-    std::cerr << "lmssl: " << (std::string(phase) == "load" ? "refused: " : e.code == "APP_FAIL" ? "" : "error: ") << e.what() << "\n";
-    return e.code == "APP_FAIL" ? 4 : 3;
-  };
-  dslvm::Program program;
-  try {
-    program = dslvm::Program::load(dslvm::read_file(file), schema, reg);
-  } catch (const dslvm::Error &e) {
-    return report("load", e);
-  } catch (const std::exception &e) {
-    return report("load", dslvm::Error("LOAD_BAD_BYTECODE", e.what()));
+  dslvm::ResultContract contract;
+  try { contract = dslvm::ResultContract::from_schema(schema); }
+  catch (const dslvm::Error &e) { results.fail(std::nullopt, "load", e); return results.write_frame(std::cout); }
+  std::vector<std::pair<size_t, dslvm::Program>> programs;
+  for (const auto &part : results.registrations()) {
+    try { programs.emplace_back(part.index, dslvm::Program::load(dslvm::read_file(part.file), schema, reg)); }
+    catch (const dslvm::Error &e) { std::cerr << "lmssl: refused: " << e.what() << "\n"; results.fail(part.index, "load", e); return results.write_frame(std::cout); }
+    catch (const std::exception &e) { std::cerr << e.what() << "\n"; results.fail(part.index, "load", dslvm::Error("LOAD_BAD_BYTECODE", e.what())); return results.write_frame(std::cout); }
   }
-  try {
-    program.run(context, reg);
-  } catch (const dslvm::Error &e) {
-    std::cout.flush();
-    return report("run", e);
+  for (auto &[index, program] : programs) {
+    try {
+      host.args = arguments[index];
+      results.select(index, reg, contract);
+      // Dry mode validates all programs without filesystem, socket, TLS or key-generation effects.
+      if (!results.dry()) program.run(context, reg);
+      results.complete(index);
+    } catch (const dslvm::Error &e) {
+      std::cerr << "lmssl: " << e.what() << "\n";
+      results.fail(index, e.code == "APP_FAIL" ? "app" : "run", e); break;
+    } catch (const std::exception &e) { std::cerr << e.what() << "\n"; results.fail(index, "run", dslvm::Error(e.what())); break; }
   }
-  std::cout.flush();
-  return host.json_mode ? dslvm::report_ok() : 0;
+  return results.write_frame(std::cout);
 }

@@ -1,7 +1,8 @@
 # out.fail ends the run with the application exit code (4).
-p = _lmcode_ schema="../schema/lmssl.dsl.json";
+p = _lmcode_ cli="lmssl";
 out.line("before");
 out.fail("deliberate application failure");
 out.line("never printed");
 end _lmcode_
-savedsl(p, ARGV[0]);
+r = run_lmcode(p, {args: ARGV});
+require(r.ok, json_stringify(r));

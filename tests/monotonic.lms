@@ -1,5 +1,5 @@
 # Monotonic microsecond clock: nonnegative, nondecreasing, and advances across a short wait.
-p = _lmcode_ schema="../schema/lmssl.dsl.json";
+p = _lmcode_ cli="lmssl";
 let prev = ssl.monotonic_us();
 if (prev < 0) { out.fail("negative monotonic_us: " + str(prev)); }
 for (i in range(0, 64)) {
@@ -22,4 +22,5 @@ let t1 = ssl.monotonic_us();
 if (t1 <= t0) { out.fail("monotonic_us did not advance: " + str(t0) + " -> " + str(t1)); }
 out.line("monotonic delta_us=" + str(t1 - t0));
 end _lmcode_
-savedsl(p, ARGV[0]);
+r = run_lmcode(p, {args: ARGV});
+require(r.ok, json_stringify(r));

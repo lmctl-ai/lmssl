@@ -13,7 +13,7 @@ assert command, 'schema path and host command required'
 old = '--' + 'dsl'
 with tempfile.TemporaryDirectory(prefix='host flag control ') as directory:
     scratch = Path(directory)
-    missing = scratch / 'must-not-open.dslb'
+    missing = scratch / 'must-not-open.lmcode'
     env = dict(os.environ, HOME=str(scratch), LMCTL_HOME=str(scratch / '.lmctl'))
     def run(args):
         return subprocess.run([*command, *map(str, args)], capture_output=True, env=env)

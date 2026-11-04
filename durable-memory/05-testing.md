@@ -11,7 +11,7 @@ proves the OpenSSL build and the link.
 | CLI half | `version`, `dgst`, `req -x509` (needs the embedded `openssl.cnf`), `x509` work from the same binary |
 | examples | each example is compiled and run; outputs are checked, then **cross-checked by the other half**: `openssl verify` of the DSL-made chain, `x509 -ext subjectAltName` of the wildcard, `req -verify` of the DSL-made CSR, key file mode 0600 |
 | TLS | `serve-https` + `https-steps` with a redirect (`/old` -> `/new`), handshake trace and chain; `s_client` (CLI half) against the DSL server; mutual TLS where the server reads the client certificate subject |
-| failures | `out.fail` exit 4 and the one-line `--json` result; tampered AEAD exit 3; client with no trust anchors refuses a self-signed server; trusted chain with a wrong host name refuses; truncated, missing and foreign-schema bytecode refused exit 3 |
+| failures | `out.fail` exit 4 and the terminal SDK frame; tampered AEAD exit 3; client with no trust anchors refuses a self-signed server; trusted chain with a wrong host name refuses; truncated, missing and foreign-schema bytecode refused exit 3 |
 | network | optional: `https-steps` against `google.com` through the OS trust store, including the redirect |
 
 Servers started by the test are background lmssl processes on port 0; the test waits for the `DIR/port` file they write,
@@ -44,5 +44,5 @@ Run the examples with it (the OpenSSL archives are not instrumented, which is fi
 
 ## Adding a check
 
-Compile a `.lms` with `compile file.lms $WORK/x.dslb`, run it with `run $WORK/x.dslb ARGS`, assert on stdout, and where
+Compile a `.lms` with `compile file.lms $WORK/x.lmcode`, run it with `run $WORK/x.lmcode ARGS`, assert on stdout, and where
 possible validate the artefact with the CLI half (`"$HOST" x509 ...`). Use `expect_exit CODE description cmd...` for failures.

@@ -3,10 +3,8 @@
 # This is what `openssl genpkey`, `req -new`, `req -x509`, `x509 -req -CA` and `verify` do between them.
 # The script keeps the roles apart on purpose: the "server" only ever hands its CSR to the "CA".
 #
-# Compile: lmscript examples/ca-and-leaf.lms build/ca-and-leaf.dslb
-# Run:     lmssl --lmcode build/ca-and-leaf.dslb [OUTDIR]        (default OUTDIR: build/pki)
-out_path = ARGV.len() > 0 ? ARGV[0] : "build/ca-and-leaf.dslb";
-p = _lmcode_ schema="../schema/lmssl.dsl.json";
+# Run: lmscript examples/ca-and-leaf.lms [script arguments]
+p = _lmcode_ cli="lmssl";
 let dir = "build/pki";
 if (ssl.args().len() > 0) { dir = ssl.args().at(0); }
 fs.mkdir(dir);
@@ -59,4 +57,5 @@ if (!leaf.verify_with(ca) || leaf.verify_with(other)) { out.fail("chain check is
 out.line("check it with the OpenSSL command line:");
 out.line("  lmssl verify -CAfile " + dir + "/ca.pem " + dir + "/server.pem");
 end _lmcode_
-savedsl(p, out_path);
+r = run_lmcode(p, {args: ARGV});
+require(r.ok, json_stringify(r));

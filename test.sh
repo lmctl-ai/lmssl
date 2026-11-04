@@ -61,7 +61,7 @@ ok "host-only schema self-check accepts built-in std"
 python3 - "$WORK/host.sig" "$WORK/std.sig" "$WORK/host-only-registry.sig" <<'PYCOMPARE'
 import pathlib,sys
 full,std,out=map(pathlib.Path,sys.argv[1:])
-out.write_bytes(''.join(line+'\n' for line in sorted(set(full.read_text().splitlines())-set(std.read_text().splitlines()))).encode('utf-8'))
+out.write_bytes(''.join(line+'\n' for line in sorted(set(full.read_text(encoding='utf-8').splitlines())-set(std.read_text(encoding='utf-8').splitlines()))).encode('utf-8'))
 PYCOMPARE
 diff "$WORK/host-only-compiler.sig" "$WORK/host-only-registry.sig" || fail "host-only registry/compiler parity"
 cmp schema/lmssl.host.json schema/lmssl.dsl.json || fail "schema generation reintroduced std"
@@ -77,9 +77,27 @@ MSYS2_ARG_CONV_EXCL="*" "$HOST" req -x509 -newkey ec -pkeyopt ec_paramgen_curve:
 "$HOST" x509 -in "$WORK/c.pem" -noout -subject | grep -q 'cli.test' || fail "openssl x509"
 ok "OpenSSL commands work (version, dgst, req -x509, x509)"
 
-# ---- DSL helpers
-compile() { "$LMSCRIPT" "$1" "$2" > "$WORK/compile.log" 2>&1 || { cat "$WORK/compile.log"; fail "compile $1"; }; }
-run() { "$HOST" --lmcode "$@"; }
+# ---- lmcode helpers
+export PATH="$(cd "$BUILD_DIR" && pwd):$PATH"
+export LMSCRIPT_BIN="$LMSCRIPT"
+export LMSSL_HOST="$(cd "$BUILD_DIR" && pwd)/lmssl$EXE"
+export LMSSL_SHIM="$(cd "$BUILD_DIR" && pwd)/invocation_shim$EXE"
+case "$UNAME_S" in MINGW*|MSYS*|CYGWIN*)
+  export LMSSL_HOST="$(cd "$BUILD_DIR" && pwd -W | tr '\\' '/')/lmssl$EXE"
+  export LMSSL_SHIM="$(cd "$BUILD_DIR" && pwd -W | tr '\\' '/')/invocation_shim$EXE";;
+esac
+printf 's = load_schema(cli="lmssl");\n' > "$WORK/discover.lms"
+"$LMSCRIPT" "$WORK/discover.lms" >/dev/null || fail "schema discovery"
+compile() {
+  python3 tests/invocation.py --capture-only --capture "$2.capture" "$1" > "$WORK/compile.log" 2>&1 || { cat "$WORK/compile.log"; fail "compile $1"; }
+  cp "$2.capture/0.lmcode" "$2"
+  python3 - "$2" <<'PYMAGIC'
+from pathlib import Path
+import sys
+assert Path(sys.argv[1]).read_bytes()[:6] == b'DSLB\0\6'
+PYMAGIC
+}
+run() { "$HOST" --lmcode "$@" 2>&1; }
 expect_exit() { # want-code description cmd...
   local want="$1" what="$2"; shift 2
   set +e; "$@" > "$WORK/out.txt" 2> "$WORK/err.txt"; local rc=$?; set -e
@@ -87,18 +105,18 @@ expect_exit() { # want-code description cmd...
 }
 
 # ---- examples
-compile examples/crypto-basics.lms "$WORK/crypto.dslb"
-run "$WORK/crypto.dslb" > "$WORK/crypto.txt" || fail "crypto-basics"
+compile examples/crypto-basics.lms "$WORK/crypto.lmcode"
+run "$WORK/crypto.lmcode" > "$WORK/crypto.txt" || fail "crypto-basics"
 grep -q '^ok  sha256(abc) = ba7816bf' "$WORK/crypto.txt" && grep -q '^ok  open = attack at dawn' "$WORK/crypto.txt" || fail "crypto-basics output"
 ok "example crypto-basics (digest, HMAC, PBKDF2, AEAD, signatures)"
 
-compile tests/monotonic.lms "$WORK/monotonic.dslb"
+compile tests/monotonic.lms "$WORK/monotonic.lmcode"
 python3 - "$WORK/delay.port" <<'PYDELAY' &
 import pathlib, socket, sys, time
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(("127.0.0.1", 0))
 s.listen(1)
-pathlib.Path(sys.argv[1]).write_text(str(s.getsockname()[1]))
+pathlib.Path(sys.argv[1]).write_text(str(s.getsockname()[1]), encoding='utf-8')
 conn, _ = s.accept()
 time.sleep(0.05)
 conn.sendall(b"x")
@@ -107,10 +125,10 @@ s.close()
 PYDELAY
 SERVERS+=($!)
 for _ in $(seq 1 100); do [ -s "$WORK/delay.port" ] && break; sleep 0.05; done
-run "$WORK/monotonic.dslb" "$(cat "$WORK/delay.port")" > "$WORK/monotonic.txt" || fail "monotonic_us"
+run "$WORK/monotonic.lmcode" "$(cat "$WORK/delay.port")" > "$WORK/monotonic.txt" || fail "monotonic_us"
 python3 - "$WORK/monotonic.txt" <<'PYMONO' || fail "monotonic_us delta check"
 import pathlib, re, sys
-txt = pathlib.Path(sys.argv[1]).read_text()
+txt = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
 m = re.search(r"monotonic delta_us=(\d+)", txt)
 assert m, f"unexpected output: {txt}"
 delta = int(m.group(1))
@@ -118,8 +136,8 @@ assert 30000 <= delta <= 1000000, f"expected ~50000 us delta across 50 ms wait, 
 PYMONO
 ok "ssl.monotonic_us (nonnegative, monotonic, advances across 50 ms wait)"
 
-compile examples/selfsigned-wildcard.lms "$WORK/wild.dslb"
-run "$WORK/wild.dslb" "$WORK/wild" > "$WORK/wild.txt" || fail "selfsigned-wildcard"
+compile examples/selfsigned-wildcard.lms "$WORK/wild.lmcode"
+run "$WORK/wild.lmcode" "$WORK/wild" > "$WORK/wild.txt" || fail "selfsigned-wildcard"
 grep -q 'matches www.example.test: yes' "$WORK/wild.txt" && grep -q 'matches a.b.example.test: no' "$WORK/wild.txt" || fail "wildcard matching output"
 "$HOST" x509 -in "$WORK/wild/cert.pem" -noout -ext subjectAltName | grep -q 'DNS:\*\.example\.test' || fail "openssl x509 reads the wildcard SAN"
 "$HOST" verify -CAfile "$WORK/wild/cert.pem" "$WORK/wild/cert.pem" > /dev/null || fail "openssl verify of the self-signed wildcard"
@@ -129,23 +147,23 @@ if [ "$UNAME_S" != "${UNAME_S#MINGW}" ]; then :; else
 fi
 ok "example selfsigned-wildcard (output verified by the openssl CLI half of the same binary)"
 
-compile examples/ca-and-leaf.lms "$WORK/pki.dslb"
-run "$WORK/pki.dslb" "$WORK/pki" > "$WORK/pki.txt" || fail "ca-and-leaf"
+compile examples/ca-and-leaf.lms "$WORK/pki.lmcode"
+run "$WORK/pki.lmcode" "$WORK/pki" > "$WORK/pki.txt" || fail "ca-and-leaf"
 grep -q 'signed by an impostor CA:        false' "$WORK/pki.txt" || fail "ca-and-leaf output"
 "$HOST" verify -CAfile "$WORK/pki/ca.pem" "$WORK/pki/server.pem" > /dev/null || fail "openssl verify of the leaf against the DSL-made CA"
 "$HOST" req -in "$WORK/pki/server.csr" -noout -verify > /dev/null 2>&1 || fail "openssl req -verify of the DSL-made CSR"
 ok "example ca-and-leaf (chain verified by openssl verify, CSR by openssl req -verify)"
 
 # ---- TLS between two lmssl processes: serve-https.lms + https-steps.lms with a redirect
-compile examples/serve-https.lms "$WORK/serve.dslb"
-compile examples/https-steps.lms "$WORK/steps.dslb"
+compile examples/serve-https.lms "$WORK/serve.lmcode"
+compile examples/https-steps.lms "$WORK/steps.lmcode"
 rm -rf "$WORK/server"
-run "$WORK/serve.dslb" 0 2 "$WORK/server" > "$WORK/serve.log" 2>&1 &
+run "$WORK/serve.lmcode" 0 2 "$WORK/server" > "$WORK/serve.log" 2>&1 &
 SERVERS+=($!)
 for _ in $(seq 1 100); do [ -s "$WORK/server/port" ] && break; sleep 0.1; done
 PORT="$(cat "$WORK/server/port")"
 [ -n "$PORT" ] || fail "server did not start: $(cat "$WORK/serve.log")"
-MSYS2_ARG_CONV_EXCL="*" $TIMEOUT_CMD 60 "$HOST" --lmcode "$WORK/steps.dslb" localhost "$PORT" /old "$WORK/server/cert.pem" > "$WORK/steps.txt" || { cat "$WORK/steps.txt" "$WORK/serve.log"; fail "https-steps against the local server"; }
+MSYS2_ARG_CONV_EXCL="*" $TIMEOUT_CMD 60 "$HOST" --lmcode "$WORK/steps.lmcode" localhost "$PORT" /old "$WORK/server/cert.pem" > "$WORK/steps.txt" 2>&1 || { cat "$WORK/steps.txt" "$WORK/serve.log"; fail "https-steps against the local server"; }
 grep -q 'HTTP/1.1 302 Found' "$WORK/steps.txt" && grep -q 'request 2: https://localhost:'"$PORT"'/new' "$WORK/steps.txt" \
   && grep -q 'HTTP/1.1 200 OK' "$WORK/steps.txt" && grep -q 'verification: ok' "$WORK/steps.txt" \
   && grep -q 'ClientHello' "$WORK/steps.txt" && grep -q 'sni:      localhost' "$WORK/steps.txt" || { cat "$WORK/steps.txt"; fail "https-steps output"; }
@@ -154,7 +172,7 @@ ok "examples serve-https + https-steps (TCP, TLS 1.3 handshake trace, chain, red
 
 # ---- the OpenSSL s_client half talks to a DSL-made server too
 rm -rf "$WORK/server2"
-run "$WORK/serve.dslb" 0 1 "$WORK/server2" > "$WORK/serve2.log" 2>&1 &
+run "$WORK/serve.lmcode" 0 1 "$WORK/server2" > "$WORK/serve2.log" 2>&1 &
 SERVERS+=($!)
 for _ in $(seq 1 100); do [ -s "$WORK/server2/port" ] && break; sleep 0.1; done
 PORT2="$(cat "$WORK/server2/port")"
@@ -164,68 +182,71 @@ grep -q 'hello from lmssl' "$WORK/sclient.txt" || { cat "$WORK/sclient.txt"; fai
 ok "openssl s_client (same binary) talks to the DSL TLS server"
 
 # ---- mutual TLS
-compile tests/serve-mtls.lms "$WORK/smtls.dslb"
-compile tests/mtls.lms "$WORK/mtls.dslb"
+compile tests/serve-mtls.lms "$WORK/smtls.lmcode"
+compile tests/mtls.lms "$WORK/mtls.lmcode"
 rm -rf "$WORK/mtls"
-run "$WORK/smtls.dslb" 0 "$WORK/mtls" > "$WORK/smtls.log" 2>&1 &
+run "$WORK/smtls.lmcode" 0 "$WORK/mtls" > "$WORK/smtls.log" 2>&1 &
 SERVERS+=($!)
 for _ in $(seq 1 100); do [ -s "$WORK/mtls/port" ] && break; sleep 0.1; done
-$TIMEOUT_CMD 30 "$HOST" --lmcode "$WORK/mtls.dslb" "$(cat "$WORK/mtls/port")" "$WORK/mtls" > "$WORK/mtls.txt" || { cat "$WORK/mtls.txt" "$WORK/smtls.log"; fail "mutual TLS"; }
+$TIMEOUT_CMD 30 "$HOST" --lmcode "$WORK/mtls.lmcode" "$(cat "$WORK/mtls/port")" "$WORK/mtls" > "$WORK/mtls.txt" 2>&1 || { cat "$WORK/mtls.txt" "$WORK/smtls.log"; fail "mutual TLS"; }
 grep -q 'server says: hello CN=alice,O=clients' "$WORK/mtls.txt" || { cat "$WORK/mtls.txt"; fail "mutual TLS identity"; }
 ok "mutual TLS (server requires and reads the client certificate)"
 
 # ---- failure paths and exit codes
-compile tests/fail-app.lms "$WORK/fapp.dslb"
-expect_exit 4 "out.fail" "$HOST" --lmcode "$WORK/fapp.dslb"
+compile tests/fail-app.lms "$WORK/fapp.lmcode"
+expect_exit 4 "out.fail" "$HOST" --lmcode "$WORK/fapp.lmcode"
 grep -q 'deliberate application failure' "$WORK/err.txt" || fail "app failure message"
-expect_exit 4 "out.fail --json" "$HOST" --json --lmcode "$WORK/fapp.dslb"
-grep -q '"phase": "app"' "$WORK/out.txt" && [ "$(wc -l < "$WORK/out.txt" | tr -d ' ')" = 1 ] || { cat "$WORK/out.txt"; fail "--json prints exactly one result line"; }
-ok "out.fail exits 4; --json keeps stdout to one result line"
+expect_exit 4 "out.fail --json" "$HOST" --json --lmcode "$WORK/fapp.lmcode"
+grep -q '"phase":"app"' "$WORK/out.txt" && [ "$(wc -l < "$WORK/out.txt" | tr -d ' ')" = 3 ] || { cat "$WORK/out.txt"; fail "--json prints exactly one terminal frame"; }
+ok "out.fail exits 4; --json keeps stdout to one terminal frame"
 
-compile tests/fail-aead.lms "$WORK/faead.dslb"
-expect_exit 3 "tampered AEAD" "$HOST" --lmcode "$WORK/faead.dslb"
+compile tests/fail-aead.lms "$WORK/faead.lmcode"
+expect_exit 3 "tampered AEAD" "$HOST" --lmcode "$WORK/faead.lmcode"
 grep -q 'authentication failed' "$WORK/err.txt" || fail "AEAD message"
 ok "tampered AEAD message is rejected (exit 3)"
 
 rm -rf "$WORK/server3"
-run "$WORK/serve.dslb" 0 1 "$WORK/server3" > "$WORK/serve3.log" 2>&1 &
+run "$WORK/serve.lmcode" 0 1 "$WORK/server3" > "$WORK/serve3.log" 2>&1 &
 SERVERS+=($!)
 for _ in $(seq 1 100); do [ -s "$WORK/server3/port" ] && break; sleep 0.1; done
-compile tests/fail-trust.lms "$WORK/ftrust.dslb"
-expect_exit 3 "untrusted server" "$HOST" --lmcode "$WORK/ftrust.dslb" "$(cat "$WORK/server3/port")"
+compile tests/fail-trust.lms "$WORK/ftrust.lmcode"
+expect_exit 3 "untrusted server" "$HOST" --lmcode "$WORK/ftrust.lmcode" "$(cat "$WORK/server3/port")"
 grep -q 'certificate verify' "$WORK/err.txt" || { cat "$WORK/err.txt"; fail "trust failure message"; }
 ok "client without trust anchors refuses a self-signed server (exit 3)"
 
 rm -rf "$WORK/server4"
-run "$WORK/serve.dslb" 0 1 "$WORK/server4" > "$WORK/serve4.log" 2>&1 &
+run "$WORK/serve.lmcode" 0 1 "$WORK/server4" > "$WORK/serve4.log" 2>&1 &
 SERVERS+=($!)
 for _ in $(seq 1 100); do [ -s "$WORK/server4/port" ] && break; sleep 0.1; done
-compile tests/fail-hostname.lms "$WORK/fhost.dslb"
-expect_exit 3 "wrong host name" "$HOST" --lmcode "$WORK/fhost.dslb" "$(cat "$WORK/server4/port")" "$WORK/server4/cert.pem"
+compile tests/fail-hostname.lms "$WORK/fhost.lmcode"
+expect_exit 3 "wrong host name" "$HOST" --lmcode "$WORK/fhost.lmcode" "$(cat "$WORK/server4/port")" "$WORK/server4/cert.pem"
 grep -q 'hostname mismatch\|certificate verify' "$WORK/err.txt" || { cat "$WORK/err.txt"; fail "hostname failure message"; }
 ok "trusted chain with the wrong host name is refused (exit 3)"
 
 # ---- loader refusals happen before anything runs
-printf 'DSLB' > "$WORK/trunc.dslb"
-expect_exit 3 "truncated bytecode" "$HOST" --lmcode "$WORK/trunc.dslb"
-expect_exit 3 "missing bytecode" "$HOST" --lmcode "$WORK/does-not-exist.dslb"
+printf 'DSLB' > "$WORK/trunc.lmcode"
+expect_exit 3 "truncated bytecode" "$HOST" --lmcode "$WORK/trunc.lmcode"
+expect_exit 3 "missing bytecode" "$HOST" --lmcode "$WORK/does-not-exist.lmcode"
 cat > "$WORK/other.schema.json" <<'EOF'
 {"dsl.schema": 2, "name": "other", "types": {"T": {"methods": {"go": [{"params": [], "returns": "void"}]}}}, "functions": {}, "context": {"t": "T"}}
 EOF
 cat > "$WORK/other.lms" <<EOF
-p = _dsl_ schema="$WORK/other.schema.json";
+p = _lmcode_ schema="$WORK/other.schema.json";
 t.go();
-end _dsl_
-savedsl(p, "$WORK/other.dslb");
+end _lmcode_
 EOF
-"$LMSCRIPT" "$WORK/other.lms" > /dev/null 2>&1 || fail "compile other schema"
-expect_exit 3 "foreign schema" "$HOST" --lmcode "$WORK/other.dslb"
+compile "$WORK/other.lms" "$WORK/other.lmcode"
+expect_exit 3 "foreign schema" "$HOST" --lmcode "$WORK/other.lmcode"
 grep -qi 'schema' "$WORK/err.txt" || { cat "$WORK/err.txt"; fail "schema mismatch message"; }
 ok "truncated, missing and foreign-schema bytecode are refused (exit 3)"
 
 if [ "${LMSSL_NETWORK:-0}" = 1 ]; then
-  $TIMEOUT_CMD 90 "$HOST" --lmcode "$WORK/steps.dslb" google.com > "$WORK/net.txt" || { cat "$WORK/net.txt"; fail "https-steps google.com"; }
+  $TIMEOUT_CMD 90 "$HOST" --lmcode "$WORK/steps.lmcode" google.com > "$WORK/net.txt" 2>&1 || { cat "$WORK/net.txt"; fail "https-steps google.com"; }
   grep -q 'verification: ok' "$WORK/net.txt" && grep -q 'HTTP/1.1 [23]' "$WORK/net.txt" || { cat "$WORK/net.txt"; fail "google.com output"; }
   ok "network: https-steps google.com (system trust store, redirect)"
 fi
+python3 tests/source-smoke.py "$WORK" || fail "public source invocation"
+ok "public source examples forward ARGV via run_lmcode"
+python3 tests/protocol.py "$WORK" || fail "invocation protocol"
+ok "builder order, load-before-effects, dry metadata, arguments and framing"
 echo "PASS $pass checks"

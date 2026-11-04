@@ -1,7 +1,7 @@
 # lmssl durable memory
 
 Design and investigation notes for the lmssl host (OpenSSL 4.0.3 built statically + lmcode-cpp, scripted by lmscript
-`_dsl_` bytecode). Read in numeric order.
+`_lmcode_` bytecode). Read in numeric order.
 
 - `01-purpose-and-design.md` — what lmssl is, how one binary is both `openssl` and a DSL host, the host-vs-script boundary.
 - `02-static-openssl-build.md` — how OpenSSL is configured, built and repackaged (main renaming, object archive,
@@ -14,4 +14,6 @@ Design and investigation notes for the lmssl host (OpenSSL 4.0.3 built staticall
 - `07-open-items.md` — known gaps and next steps.
 
 Related, outside this repo: `../lmcode-cpp` (runtime, pinned by `sdk.lock`), `../lmhtml` and `../lmcad` (sibling hosts
-whose layout this follows), lmscript `durable-memory/dsl-framework.md` (the `_dsl_` language).
+whose layout this follows), lmscript `durable-memory/dsl-framework.md` (the `_lmcode_` language).
+
+- [11-invocation-envelope.md](11-invocation-envelope.md): framing, arguments, dry mode, UTF-8 tests.
