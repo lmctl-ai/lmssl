@@ -61,7 +61,9 @@ ok "host-only schema self-check accepts built-in std"
 python3 - "$WORK/host.sig" "$WORK/std.sig" "$WORK/host-only-registry.sig" <<'PYCOMPARE'
 import pathlib,sys
 full,std,out=map(pathlib.Path,sys.argv[1:])
-out.write_bytes(''.join(line+'\n' for line in sorted(set(full.read_text(encoding='utf-8').splitlines())-set(std.read_text(encoding='utf-8').splitlines()))).encode('utf-8'))
+std_sigs=set(std.read_text(encoding='utf-8').splitlines())
+assert len(std_sigs)==226, len(std_sigs)
+out.write_bytes(''.join(line+'\n' for line in sorted(set(full.read_text(encoding='utf-8').splitlines())-std_sigs)).encode('utf-8'))
 PYCOMPARE
 diff "$WORK/host-only-compiler.sig" "$WORK/host-only-registry.sig" || fail "host-only registry/compiler parity"
 cmp schema/lmssl.host.json schema/lmssl.dsl.json || fail "schema generation reintroduced std"
@@ -249,4 +251,39 @@ python3 tests/source-smoke.py "$WORK" || fail "public source invocation"
 ok "public source examples forward ARGV via run_lmcode"
 python3 tests/protocol.py "$WORK" || fail "invocation protocol"
 ok "builder order, load-before-effects, dry metadata, arguments and framing"
+
+# ---- lmcode std REST endpoints and stateless CLI (RestGet, CliCommand, CliOption, rest_cli)
+cat > "$WORK/std-rest-cli.lms" <<'LMS'
+p = _lmcode_ cli="lmssl";
+@"--alg"
+fn opt_alg(x: RestExchange) -> void implements CliOption {
+  x.set("alg", x.query("alg"));
+}
+
+@"digest"
+fn cmd_digest(x: RestExchange) -> void implements CliCommand {
+  let alg = x.get("alg");
+  x.send(alg + ":" + ssl.digest(alg, x.body()));
+}
+
+@"/cert/self"
+fn get_self_cert(x: RestExchange) -> void implements RestGet {
+  let key = ssl.gen_ec("P-256");
+  let cert = ssl.new_cert(key, "CN=rest.example.test");
+  cert.valid_days(30);
+  cert.sign_self(key, "SHA256");
+  x.json("{\"subject\":\"" + cert.subject() + "\"}");
+}
+
+rest_config("session", "global");
+$return.cli_out = rest_cli(str_split("--alg=SHA256 digest -- abc", " "));
+$return.get_out = rest_cli(str_split("/cert/self", " "));
+end _lmcode_
+LMS
+compile "$WORK/std-rest-cli.lms" "$WORK/std-rest-cli.lmcode"
+out="$("$HOST" --lmcode "$WORK/std-rest-cli.lmcode")" || fail "std-rest-cli run"
+echo "$out" | grep -qF '"cli_out":"SHA256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"' || fail "std-rest-cli cli_out: $out"
+echo "$out" | grep -qF '"get_out":"{\"subject\":\"CN=rest.example.test\"}"' || fail "std-rest-cli get_out: $out"
+ok "lmcode std REST endpoints and stateless CLI (RestGet, CliCommand, CliOption, rest_cli)"
+
 echo "PASS $pass checks"

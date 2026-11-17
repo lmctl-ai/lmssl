@@ -88,6 +88,38 @@ go to stderr. `--json` remains accepted as a compatibility flag. Native OpenSSL 
 Use `--dry-run --lmcode FILE` to validate without file, key-generation or socket effects.
 For multiple parts, repeat `--lmcode FILE [ARG ...]`; each part receives its own `ssl.args()`.
 
+### Standard REST Endpoints and Stateless CLI in `lmcode`
+
+Because `lmssl` embeds the canonical `lmcode` standard library (`lmcode_std_v3`, 226 signatures), scripts can also define REST endpoints (`RestGet`, `RestPost`, `RestPut`, `RestDelete`, `RestPatch`, `RestHead`, `RestOptions`, `RestHandler`) and stateless CLI commands/options (`CliCommand`, `CliOption`) with `@"..."` path annotations and dispatch them via `rest_serve()`, `rest_route(...)`, `rest_config(...)`, or `rest_cli(args)`:
+
+```lms
+p = _lmcode_ cli="lmssl";
+  @"--alg"
+  fn opt_alg(x: RestExchange) -> void implements CliOption {
+    x.set("alg", x.query("alg"));
+  }
+
+  @"digest"
+  fn cmd_digest(x: RestExchange) -> void implements CliCommand {
+    let alg = x.get("alg");
+    x.send(alg + ":" + ssl.digest(alg, x.body()));
+  }
+
+  @"/cert/self"
+  fn get_self_cert(x: RestExchange) -> void implements RestGet {
+    let key = ssl.gen_ec("P-256");
+    let cert = ssl.new_cert(key, "CN=rest.example.test");
+    cert.valid_days(30);
+    cert.sign_self(key, "SHA256");
+    x.json("{\"subject\":\"" + cert.subject() + "\"}");
+  }
+
+  rest_config("session", "global");
+  $return.cli_out = rest_cli(str_split("--alg=SHA256 digest -- abc", " "));
+  $return.get_out = rest_cli(str_split("/cert/self", " "));
+end _lmcode_
+```
+
 ## Build
 
 ```sh
@@ -95,7 +127,7 @@ scripts/sync-openssl.sh      # shallow-clones the OpenSSL tag pinned in openssl.
 ./test.sh                    # configures, builds (OpenSSL first: a few minutes), and runs all checks
 ```
 
-Needs `lmscript` >= 0.2.460, `cmake` >= 3.24, a C/C++17 toolchain, `perl`, `make`, and `lmscript` for the tests. The result is `build/lmssl`.
+Needs `lmscript` >= 0.2.482, `cmake` >= 3.24, a C/C++17 toolchain, `perl`, `make`, and `lmscript` for the tests. The result is `build/lmssl`.
 Design notes are in [`durable-memory/`](durable-memory/index.md).
 
 ## License

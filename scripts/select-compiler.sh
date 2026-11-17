@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-MIN_VERSION="0.2.454"
+MIN_VERSION="0.2.482"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/lmcode-compiler-XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 case "$(uname -s)" in

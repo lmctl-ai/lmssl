@@ -17,3 +17,4 @@ Related, outside this repo: `../lmcode-cpp` (runtime, pinned by `sdk.lock`), `..
 whose layout this follows), lmscript `durable-memory/dsl-framework.md` (the `_lmcode_` language).
 
 - [11-invocation-envelope.md](11-invocation-envelope.md): framing, arguments, dry mode, UTF-8 tests.
+- [12-std-rest-and-cli-interfaces.md](12-std-rest-and-cli-interfaces.md): `lmcode_std_v3` (226 signatures) standard REST/CLI interfaces (`RestGet`..`RestOptions`, `RestHandler`, `CliCommand`, `CliOption`, `rest_config`, `rest_route`, `rest_serve`, `rest_cli`).

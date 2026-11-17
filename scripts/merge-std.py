@@ -66,6 +66,12 @@ def merge_schema(host, standard):
                 raise ValueError(f"conflicting type {name}.{key}")
             else:
                 current[key] = copy.deepcopy(value)
+    if standard.get("interfaces"):
+        interfaces = result.setdefault("interfaces", {})
+        for name, definition in standard["interfaces"].items():
+            if name in interfaces and interfaces[name] != definition:
+                raise ValueError(f"conflicting interface {name}")
+            interfaces.setdefault(name, copy.deepcopy(definition))
     return result
 
 def remove_standard(schema, standard):
@@ -92,6 +98,12 @@ def remove_standard(schema, standard):
                 del current["methods"][method]
         if not current.get("methods") and not any(key != "methods" for key in current):
             del result["types"][name]
+    if "interfaces" in result and standard.get("interfaces"):
+        for name, definition in standard["interfaces"].items():
+            if result["interfaces"].get(name) == definition:
+                del result["interfaces"][name]
+        if not result["interfaces"]:
+            del result["interfaces"]
     return result
 
 def signature_strings(schema):
