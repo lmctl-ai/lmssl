@@ -1,5 +1,7 @@
 # lmssl
 
+**Documentation:** [Quick reference](https://www.lmctl.com/tools/lmssl/) · [LLM skill](https://www.lmctl.com/tools/lmssl/skill.html) · [Guide](https://www.lmctl.com/tools/lmssl/guide.html) · [Reference](https://www.lmctl.com/tools/lmssl/reference.html)
+
 **lmssl is the OpenSSL command line as one static executable, plus a way to script libcrypto and libssl with compiled
 [lmscript](https://lmctl.com/tools/lmscript/skill.html) `_lmcode_` bytecode.** It exists for understanding: each step of
 generating a certificate or making an HTTPS request is one visible call, so you can see what OpenSSL does. It is not a
