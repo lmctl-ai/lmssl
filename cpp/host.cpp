@@ -378,6 +378,112 @@ struct TlsObj : Stream {
   }
 };
 
+
+std::string verify_text(SSL *ssl);
+
+// An in-memory client/server pair: both SSL objects talk through memory BIOs and the script moves the bytes, one flight or
+// record at a time, so a handshake can be watched, traced and tampered with without a socket.
+struct TlsPairObj {
+  SslP c, s;
+  BIO *c_out = nullptr, *s_out = nullptr, *c_in = nullptr, *s_in = nullptr;  // owned by the SSL objects
+  Bio c_trace, s_trace;
+  std::string err, wire, from, keylog;
+  bool failed = false, turn_client = true;
+  int64_t tamper = -1;
+  std::string c_host;
+
+  static std::string take(BIO *out) {
+    std::string d;
+    char tmp[16384];
+    while (BIO_ctrl_pending(out) > 0) {
+      int r = BIO_read(out, tmp, sizeof tmp);
+      if (r <= 0) break;
+      d.append(tmp, static_cast<size_t>(r));
+    }
+    return d;
+  }
+  // Moves what `out` holds into `in` (the peer's read side); applies a pending tamper once, to the first non-empty transfer.
+  std::string move(BIO *out, BIO *in, const char *who) {
+    std::string d = take(out);
+    if (d.empty()) return d;
+    if (tamper >= 0) {
+      if (tamper >= static_cast<int64_t>(d.size())) {
+        std::string msg = "tamper offset " + std::to_string(tamper) + " is beyond the " + std::to_string(d.size()) + " bytes sent";
+        tamper = -1;
+        throw std::runtime_error(msg);
+      }
+      d[static_cast<size_t>(tamper)] = static_cast<char>(d[static_cast<size_t>(tamper)] ^ 1);
+      tamper = -1;
+    }
+    BIO_write(in, d.data(), static_cast<int>(d.size()));
+    wire = d;
+    from = who;
+    return d;
+  }
+  void record_error(SSL *ssl, const char *what) {
+    std::string e = ossl_errors();
+    std::string vr = verify_text(ssl);
+    if (!failed) err = std::string(what) + (e.empty() ? " failed" : ": " + e) + (vr != "ok" ? " (certificate verify: " + vr + ")" : "");
+    failed = true;
+  }
+  bool done() { return SSL_is_init_finished(c.get()) && SSL_is_init_finished(s.get()); }
+  // One side takes a turn at the handshake; returns the bytes it put on the wire (empty: nothing to say).
+  std::string step() {
+    if (failed || done()) return "";
+    for (int tries = 0; tries < 2; tries++) {
+      bool cl = turn_client;
+      turn_client = !turn_client;
+      SSL *me = cl ? c.get() : s.get();
+      ERR_clear_error();
+      if (!SSL_is_init_finished(me)) {
+        int rc = SSL_do_handshake(me);
+        if (rc <= 0) {
+          int e = SSL_get_error(me, rc);
+          if (e != SSL_ERROR_WANT_READ && e != SSL_ERROR_WANT_WRITE) record_error(me, cl ? "client handshake" : "server handshake");
+        }
+      }
+      std::string d = cl ? move(c_out, s_in, "client") : move(s_out, c_in, "server");
+      if (failed) {  // the alert the failing side queued goes to its peer too
+        if (cl) { std::string a = move(c_out, s_in, "client"); d += a; } else { std::string a = move(s_out, c_in, "server"); d += a; }
+        return d;
+      }
+      if (!d.empty() || done()) return d;
+    }
+    if (!failed) { failed = true; err = "handshake stalled: neither side has anything to send"; }
+    return "";
+  }
+  std::string send(bool from_client, const std::string &data) {
+    SSL *me = from_client ? c.get() : s.get();
+    if (!done()) throw std::runtime_error("the handshake is not finished");
+    ERR_clear_error();
+    size_t put = 0;
+    if (SSL_write_ex(me, data.data(), data.size(), &put) != 1) { record_error(me, "write"); return ""; }
+    return from_client ? move(c_out, s_in, "client") : move(s_out, c_in, "server");
+  }
+  std::string recv(bool at_client) {
+    SSL *me = at_client ? c.get() : s.get();
+    if (!done()) throw std::runtime_error("the handshake is not finished");
+    std::string out;
+    char tmp[16384];
+    for (;;) {
+      size_t got = 0;
+      ERR_clear_error();
+      if (SSL_read_ex(me, tmp, sizeof tmp, &got) == 1) { out.append(tmp, got); continue; }
+      int e = SSL_get_error(me, 0);
+      if (e == SSL_ERROR_WANT_READ || e == SSL_ERROR_WANT_WRITE || e == SSL_ERROR_ZERO_RETURN) break;
+      record_error(me, at_client ? "client read" : "server read");
+      if (at_client) move(c_out, s_in, "client"); else move(s_out, c_in, "server");  // the alert goes back
+      break;
+    }
+    return out;
+  }
+};
+
+void keylog_cb(const SSL *ssl, const char *line) {
+  auto *p = static_cast<TlsPairObj *>(SSL_get_app_data(ssl));
+  if (p) { p->keylog += line; p->keylog += "\n"; }
+}
+
 // ---------------------------------------------------------------- registration plumbing
 
 struct Reg {
@@ -688,6 +794,38 @@ Value make_tls(Reg &g, TlsCtxObj &c, ConnObj &conn, const std::string &host) {
   if (rc != 1) handshake_failed(t->ssl.get(), c.server ? "TLS accept" : "TLS handshake");
   TlsObj *raw = t.release();
   return g.wrap("Tls", raw);
+}
+
+
+Value make_tls_pair(Reg &g, TlsCtxObj &cc, TlsCtxObj &sc, const std::string &host) {
+  if (cc.server || !sc.server) throw std::runtime_error("tls_pair needs a client context first and a server context second");
+  auto p = std::make_unique<TlsPairObj>();
+  p->c.reset(SSL_new(cc.ctx.get()));
+  p->s.reset(SSL_new(sc.ctx.get()));
+  if (!p->c || !p->s) fail("SSL_new");
+  if (!host.empty()) {
+    if (looks_like_ip(host)) {
+      if (!X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(p->c.get()), host.c_str())) fail("set IP to verify");
+    } else {
+      if (!SSL_set_tlsext_host_name(p->c.get(), host.c_str())) fail("set SNI");
+      if (!X509_VERIFY_PARAM_set1_host(SSL_get0_param(p->c.get()), host.c_str(), 0)) fail("set host to verify");
+    }
+  }
+  BIO *ci = BIO_new(BIO_s_mem()), *co = BIO_new(BIO_s_mem()), *si = BIO_new(BIO_s_mem()), *so = BIO_new(BIO_s_mem());
+  if (!ci || !co || !si || !so) fail("BIO_new");
+  for (BIO *b : {ci, si}) BIO_set_mem_eof_return(b, -1);  // empty read side = "want more", not end of stream
+  SSL_set_bio(p->c.get(), ci, co);
+  SSL_set_bio(p->s.get(), si, so);
+  p->c_in = ci; p->c_out = co; p->s_in = si; p->s_out = so;
+  SSL_set_connect_state(p->c.get());
+  SSL_set_accept_state(p->s.get());
+  SSL_set_app_data(p->c.get(), p.get());
+  SSL_set_app_data(p->s.get(), p.get());
+  SSL_CTX_set_keylog_callback(cc.ctx.get(), keylog_cb);
+  SSL_CTX_set_keylog_callback(sc.ctx.get(), keylog_cb);
+  if (cc.trace) { p->c_trace = mem_bio(); SSL_set_msg_callback(p->c.get(), SSL_trace); SSL_set_msg_callback_arg(p->c.get(), p->c_trace.get()); }
+  if (sc.trace) { p->s_trace = mem_bio(); SSL_set_msg_callback(p->s.get(), SSL_trace); SSL_set_msg_callback_arg(p->s.get(), p->s_trace.get()); }
+  return g.wrap("TlsPair", p.release());
 }
 
 }  // namespace
@@ -1105,6 +1243,48 @@ void register_host(dslvm::Registry &reg, Host &host) {
   g.method<TlsObj>("Tls", "read", {"int"}, "string", [](TlsObj &t, Args &a) { return str(t.read(a[0].i)); });
   g.method<TlsObj>("Tls", "read_until", {"string", "int"}, "string", [](TlsObj &t, Args &a) { return str(t.read_until(a[0].s, a[1].i)); });
   g.method<TlsObj>("Tls", "read_all", {"int"}, "string", [](TlsObj &t, Args &a) { return str(t.read_all(a[0].i)); });
+  // ---------------------------------------------------------------- TlsPair (in-memory client/server)
+  g.method<Host>("Ssl", "tls_pair", {"TlsCtx", "TlsCtx", "string"}, "TlsPair", [&g](Host &, Args &a) {
+    return make_tls_pair(g, *static_cast<TlsCtxObj *>(a[0].obj), *static_cast<TlsCtxObj *>(a[1].obj), a[2].s);
+  });
+  g.method<TlsPairObj>("TlsPair", "step", {}, "string", [](TlsPairObj &p, Args &) { return str(p.step()); });
+  g.method<TlsPairObj>("TlsPair", "done", {}, "bool", [](TlsPairObj &p, Args &) { return Value::boolean(p.done()); });
+  g.method<TlsPairObj>("TlsPair", "error", {}, "string", [](TlsPairObj &p, Args &) { return str(p.err); });
+  g.method<TlsPairObj>("TlsPair", "wire", {}, "string", [](TlsPairObj &p, Args &) { return str(p.wire); });
+  g.method<TlsPairObj>("TlsPair", "from", {}, "string", [](TlsPairObj &p, Args &) { return str(p.from); });
+  g.method<TlsPairObj>("TlsPair", "tamper", {"int"}, "void", [](TlsPairObj &p, Args &a) {
+    if (a[0].i < 0) throw std::runtime_error("negative tamper offset");
+    p.tamper = a[0].i;
+    return Value::none();
+  });
+  g.method<TlsPairObj>("TlsPair", "client_send", {"string"}, "string", [](TlsPairObj &p, Args &a) { return str(p.send(true, a[0].s)); });
+  g.method<TlsPairObj>("TlsPair", "server_send", {"string"}, "string", [](TlsPairObj &p, Args &a) { return str(p.send(false, a[0].s)); });
+  g.method<TlsPairObj>("TlsPair", "client_recv", {}, "string", [](TlsPairObj &p, Args &) { return str(p.recv(true)); });
+  g.method<TlsPairObj>("TlsPair", "server_recv", {}, "string", [](TlsPairObj &p, Args &) { return str(p.recv(false)); });
+  g.method<TlsPairObj>("TlsPair", "keylog", {}, "string", [](TlsPairObj &p, Args &) { return str(p.keylog); });
+  g.method<TlsPairObj>("TlsPair", "client_trace", {}, "string", [](TlsPairObj &p, Args &) { return str(p.c_trace ? bio_string(p.c_trace.get()) : std::string()); });
+  g.method<TlsPairObj>("TlsPair", "server_trace", {}, "string", [](TlsPairObj &p, Args &) { return str(p.s_trace ? bio_string(p.s_trace.get()) : std::string()); });
+  g.method<TlsPairObj>("TlsPair", "version", {}, "string", [](TlsPairObj &p, Args &) { return str(SSL_get_version(p.c.get())); });
+  g.method<TlsPairObj>("TlsPair", "cipher", {}, "string", [](TlsPairObj &p, Args &) {
+    const char *n = SSL_get_cipher_name(p.c.get());
+    return str(n ? n : "");
+  });
+  g.method<TlsPairObj>("TlsPair", "group", {}, "string", [](TlsPairObj &p, Args &) {
+    const char *n = SSL_get0_group_name(p.c.get());
+    return str(n ? n : "");
+  });
+  g.method<TlsPairObj>("TlsPair", "server_name", {}, "string", [](TlsPairObj &p, Args &) {
+    const char *n = SSL_get_servername(p.s.get(), TLSEXT_NAMETYPE_host_name);
+    return str(n ? n : "");
+  });
+  g.method<TlsPairObj>("TlsPair", "verified", {}, "bool", [](TlsPairObj &p, Args &) { return Value::boolean(SSL_get_verify_result(p.c.get()) == X509_V_OK); });
+  g.method<TlsPairObj>("TlsPair", "verify_result", {}, "string", [](TlsPairObj &p, Args &) { return str(verify_text(p.c.get())); });
+  g.method<TlsPairObj>("TlsPair", "peer", {}, "Cert", [&g](TlsPairObj &p, Args &) {
+    X509 *x = SSL_get1_peer_certificate(p.c.get());
+    if (!x) throw std::runtime_error("the server sent no certificate yet");
+    return g.wrap("Cert", new CertObj{X509p(x)});
+  });
+
   g.method<TlsObj>("Tls", "shutdown", {}, "void", [](TlsObj &t, Args &) {
     SSL_shutdown(t.ssl.get());
     ERR_clear_error();

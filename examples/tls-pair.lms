@@ -1,0 +1,32 @@
+# A TLS 1.3 handshake in one process: a client and a server joined by memory, no socket. Each step() is one flight of
+# bytes; wire() keeps the last bytes, tamper(n) flips one bit of the next transfer, keylog() has the traffic secrets.
+# Run: lmscript examples/tls-pair.lms
+p = _lmcode_ cli="lmssl";
+let ca_key = ssl.gen_ec("P-256");
+let ca = ssl.new_cert(ca_key, "CN=Demo Root CA");
+ca.ca(true);
+ca.sign_self(ca_key, "SHA256");
+let key = ssl.gen_ec("P-256");
+let leaf = ssl.new_cert(key, "CN=demo.example");
+leaf.san("DNS:demo.example");
+leaf.sign_with(ca, ca_key, "SHA256");
+let server = ssl.server_ctx(leaf, key);
+let client = ssl.client_ctx();
+client.add_ca(ca);
+let pair = ssl.tls_pair(client, server, "demo.example");
+let n = 0;
+while (!pair.done() && pair.error() == "") {
+  let flight = pair.step();
+  n = n + 1;
+  out.line("flight " + str(n) + " from " + pair.from() + ": " + str(str_len(flight)) + " bytes");
+}
+out.line(pair.version() + " " + pair.cipher() + " " + pair.group() + " verified=" + str(pair.verified()));
+pair.client_send("hello\n");
+out.line("server read: " + str_trim(pair.server_recv()));
+pair.tamper(8);
+pair.client_send("tampered");
+pair.server_recv();
+out.line("after a flipped bit: " + pair.error());
+end _lmcode_
+r = run_lmcode(p, {args: ARGV});
+require(r.ok, json_stringify(r));

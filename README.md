@@ -82,7 +82,7 @@ require(r.ok, json_stringify(r));
 Objects: `Key`, `Cert`, `Csr`, `TlsCtx`, `Tls`, `Conn`, `Listener`, `StrList`. `Cert` is a builder (`san`, `ca`, `ext`,
 `valid_days`, `sign_self`, `sign_with`) and an inspector (`subject`, `issuer`, `not_after`, `san_text`, `matches_host`,
 `fingerprint`, `text`, ...). `TlsCtx` is the client or server policy (`min_version`, `alpn`, `ciphers`, `suites`, `groups`,
-`ca_file`, `system_roots`, `client_cert`, `require_client`, `trace`); `connect` / `accept` perform the handshake and return a `Tls`.
+`ca_file`, `system_roots`, `client_cert`, `require_client`, `trace`); `connect` / `accept` perform the handshake and return a `Tls`. `ssl.tls_pair(client_ctx, server_ctx, host)` returns a `TlsPair`: both ends in one process joined by memory, so a handshake can be stepped flight by flight (`step`, `wire`, `from`), traced (`client_trace`, `server_trace`), keyed out (`keylog`) and tampered with (`tamper`).
 
 Exit codes: `0` ok, `2` compile error (lmscript), `3` load refused or host error (bad bytecode, schema mismatch,
 handshake failure, ...), `4` the script called `out.fail`. All lmcode invocations write one terminal SDK frame to stdout; `out.line/text` diagnostics

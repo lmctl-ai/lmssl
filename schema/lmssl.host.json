@@ -765,6 +765,136 @@
         ]
       }
     },
+    "TlsPair": {
+      "methods": {
+        "step": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "done": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "error": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "wire": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "from": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "tamper": [
+          {
+            "params": [
+              "int"
+            ],
+            "returns": "void"
+          }
+        ],
+        "client_send": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "string"
+          }
+        ],
+        "server_send": [
+          {
+            "params": [
+              "string"
+            ],
+            "returns": "string"
+          }
+        ],
+        "client_recv": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "server_recv": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "keylog": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "client_trace": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "server_trace": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "version": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "cipher": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "group": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "server_name": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "verified": [
+          {
+            "params": [],
+            "returns": "bool"
+          }
+        ],
+        "verify_result": [
+          {
+            "params": [],
+            "returns": "string"
+          }
+        ],
+        "peer": [
+          {
+            "params": [],
+            "returns": "Cert"
+          }
+        ]
+      }
+    },
     "Ssl": {
       "methods": {
         "version": [
@@ -1002,6 +1132,16 @@
               "Key"
             ],
             "returns": "TlsCtx"
+          }
+        ],
+        "tls_pair": [
+          {
+            "params": [
+              "TlsCtx",
+              "TlsCtx",
+              "string"
+            ],
+            "returns": "TlsPair"
           }
         ]
       }

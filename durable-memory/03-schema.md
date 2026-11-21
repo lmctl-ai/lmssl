@@ -23,6 +23,7 @@ under four names); the schema split is only for readability in scripts.
 | `Net` | resolver and sockets | `resolve`, `connect`, `listen`, `timeout` (seconds, applies to connections created afterwards) |
 | `TlsCtx` | `SSL_CTX` | client/server policy; every setter returns itself |
 | `Tls` | `SSL` after a completed handshake | negotiated parameters, peer certificate and chain, `trace`, stream I/O |
+| `TlsPair` | two `SSL` objects, each with a memory `BIO` in and out | in-memory client/server: `step()` runs one side's turn of the handshake and returns the bytes it sent, `client_send`/`server_recv` (and the reverse) move records, `tamper(n)` XORs bit 0 of byte n of the next transfer, `keylog()` collects `SSL_CTX_set_keylog_callback` lines, `client_trace`/`server_trace` need `ctx.trace(true)`; failures are reported by `error()` (the first one wins), not thrown |
 | `StrList` | `vector<string>` | `len/at/add/join`; `str_list()` and `str_split()` make them |
 | `Out`, `Fs` | process I/O | `line/text/warn/fail`; `read/write/write_private/exists/mkdir/remove` |
 

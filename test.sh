@@ -207,6 +207,12 @@ expect_exit 3 "tampered AEAD" "$HOST" --lmcode "$WORK/faead.lmcode"
 grep -q 'authentication failed' "$WORK/err.txt" || fail "AEAD message"
 ok "tampered AEAD message is rejected (exit 3)"
 
+compile examples/tls-pair.lms "$WORK/pair.lmcode"
+run "$WORK/pair.lmcode" > "$WORK/pair.txt" || { cat "$WORK/pair.txt"; fail "tls-pair"; }
+grep -q '^flight 1 from client:' "$WORK/pair.txt" && grep -q 'TLSv1.3 .* verified=true' "$WORK/pair.txt" && grep -q '^server read: hello' "$WORK/pair.txt" \
+  && grep -q 'after a flipped bit: server read: .*bad record mac' "$WORK/pair.txt" || { cat "$WORK/pair.txt"; fail "tls-pair output"; }
+ok "in-memory TLS pair (flights, TLS 1.3, data both ways, flipped bit rejected)"
+
 rm -rf "$WORK/server3"
 run "$WORK/serve.lmcode" 0 1 "$WORK/server3" > "$WORK/serve3.log" 2>&1 &
 SERVERS+=($!)
